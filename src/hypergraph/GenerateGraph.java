@@ -44,7 +44,12 @@ public class GenerateGraph
         for (int i = 0; i < numberOfVertices; i++)
             G.addVertex(Integer.toString(i));
          for (int i = 0; i < numberOfEdges; i++)
-            G.addEdge("", RandomUtils.randomSubSet(G.vertices), RandomUtils.randomMap(G.vertices));
+         {
+            Set<Vertex> vertices = new TreeSet<>();
+            while (vertices.size() < 2)
+                vertices = RandomUtils.randomSubSet(G.vertices, .2);
+            G.addEdge("", vertices, RandomUtils.randomMap(G.vertices));
+         }
         
         return G;
     }

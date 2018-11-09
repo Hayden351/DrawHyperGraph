@@ -34,14 +34,18 @@ public class DrawHyperGraph extends PApplet
 
 // TODO: change font maybe
     PFont font;
+    @Override
+    public void settings()
+    {
+        size(displayWidth, displayHeight);
+    }   
 
     @Override
     public void setup()
     {
-
         vertexLocations = new TreeMap<>();
         
-        G = GenerateGraph.randomGraph(7, 3);
+        G = GenerateGraph.randomGraph(8, 14);
         
         // initially no vertex is being manipulated
         held = null;
@@ -71,7 +75,7 @@ public class DrawHyperGraph extends PApplet
         // find all overlapping edges
         // first separate the graph into distinct classes
         // where each class is of edges that have the same set of vertices they connect
-        ArrayList<ArrayList<Edge>> classes = new ArrayList<ArrayList<Edge>>();
+        ArrayList<ArrayList<Edge>> classes = new ArrayList<>();
         for (Edge e : G.edges()) {
             boolean placed = false;
             for (int i = 0; i < classes.size(); i++) {
@@ -83,7 +87,7 @@ public class DrawHyperGraph extends PApplet
                 }
             }
             if (!placed) {
-                ArrayList<Edge> newClass = new ArrayList<Edge>();
+                ArrayList<Edge> newClass = new ArrayList<>();
                 newClass.add(e);
                 classes.add(newClass);
             }
@@ -222,19 +226,14 @@ public class DrawHyperGraph extends PApplet
         textAlign(CENTER);
     }
 
-    
-    
-
-    
-
-    public void settings()
-    {
-        size(1000, 1000);
-    }
-
+    public static boolean presenting = true;
     public static void main(String[] args)
     {
-        String[] appletArgs = new String[]{"hypergraph.DrawHyperGraph"};
+        String[] appletArgs;
+        if (presenting)
+            appletArgs= new String[]{"--present", "--window-color=#666666", "--hide-stop", "hypergraph.DrawHyperGraph"};
+        else 
+            appletArgs= new String[]{"hypergraph.DrawHyperGraph"};
         if (args != null)
         {
             PApplet.main(concat(appletArgs, args));
@@ -244,4 +243,4 @@ public class DrawHyperGraph extends PApplet
             PApplet.main(appletArgs);
         }
     }
-}
+} // end class DrawHyperGraph
