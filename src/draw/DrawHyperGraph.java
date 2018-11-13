@@ -12,11 +12,15 @@ import hypergraph.Vertex;
 import hypergraph.Edge;
 import hypergraph.GenerateGraph;
 import java.awt.Color;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -29,11 +33,14 @@ public class DrawHyperGraph extends PApplet
     public static Vertex held;
     public static Graph G;
 
-    private static final int vertexRadius = 30;
-    private static final int headingWidth = 10;
-    private static final int headingHeight = 15;
+    @CommandLineConfigurable private static int vertexRadius = 30;
+    @CommandLineConfigurable private static int headingWidth = 10;
+    @CommandLineConfigurable private static int headingHeight = 15;
     
-    private static Color baseVertexColor;
+    @CommandLineConfigurable private static Color baseVertexColor;
+    
+    @CommandLineConfigurable private static int initialWidth;
+    @CommandLineConfigurable private static int initialHeight;
 
     public static final float PHI = (1 + sqrt(5)) / 2;
 
@@ -49,6 +56,8 @@ public class DrawHyperGraph extends PApplet
     public void setup ()
     {
         surface.setResizable(true);
+        surface.setSize(initialWidth, initialHeight);
+        
         // initially no vertex is being manipulated
         held = null;
 
@@ -93,19 +102,15 @@ public class DrawHyperGraph extends PApplet
             (edgeClass, e) -> 
                 edgeClass.get(0).sameConnections(e);
         
-        G.edges().forEach
-        ( edge ->
-            // if matches an equivalence class then add edge to class
-            equivalenceClasses.
-                stream().
+        G.edges().forEach // if matches an equivalence class then add edge to class
+        ( edge -> equivalenceClasses.stream().
                 filter(edgeClass -> hasSameConnectionsAsClass.test(edgeClass, edge)).
-                findFirst().
-                orElseGet(() -> 
-                    {   // create new class since one doesn't exist
-                        ArrayList<Edge> newClass = new ArrayList<>();
-                        equivalenceClasses.add(newClass);
-                        return newClass;
-                    }).
+                findFirst().orElseGet(() -> 
+                {   // create new edge class since one doesn't exist
+                    ArrayList<Edge> newEdgeClass = new ArrayList<>();
+                    equivalenceClasses.add(newEdgeClass);
+                    return newEdgeClass;
+                }).
                 add(edge)
         );
         
@@ -232,8 +237,8 @@ public class DrawHyperGraph extends PApplet
         textAlign(CENTER);
     }
 
-    
-    public static Class translate(String type)
+    // TODO: this naming convention makes no sense
+    public static Class translate (String type)
     {
         switch (type)
         {
@@ -242,7 +247,7 @@ public class DrawHyperGraph extends PApplet
             default: return null;
         }
     }
-    public static Object stringToType(String type, String value)
+    public static Object stringToType (String type, String value)
     {
         switch (type)
         {
@@ -252,9 +257,19 @@ public class DrawHyperGraph extends PApplet
         }
     }
     
+    private static Object convertArg (Class<?> type, String arg)
+    {
+        final String a = Integer.class.getCanonicalName();
+        switch (type.getCanonicalName())
+        {
+            case "java.lang.String": return arg;
+            case "java.lang.Integer": case "int": return Integer.parseInt(arg);
+            
+        }
+        return null;
+    }
     
-    
-    public static void main(String[] args)
+    public static void main (String[] args)
     {
         boolean presenting = false;
         boolean vertexColor = false;
@@ -283,6 +298,7 @@ public class DrawHyperGraph extends PApplet
         {
             // program is about drawing a graph so the main command line arguments
             // will be a GenerateGraph function and its parameters through reflection
+            // TODO: each flag gets the next collection of args as its args
             int i = 0;
             for (; i < args.length && args[i].startsWith("-"); i++)
             {
@@ -295,8 +311,44 @@ public class DrawHyperGraph extends PApplet
                     } break;
                     case "-vertexColor":
                     {
+                        // TODO: make conistent with size thats
                         baseVertexColor = parseColorFromArgs.apply(args[++i]);
                         vertexColor = true;
+                    } break;
+                    case "-size":
+                    {
+                        // TODO: replace parse int with a state machine
+                        //       just for funzies
+                        // wat do when there are not enough arguments
+                        // or arguments are not valid natural numbers
+                        initialWidth = Integer.parseInt(args[++i]);
+                        initialHeight = Integer.parseInt(args[++i]);
+                    } break;
+                    default:
+                    {
+                        flag = flag.substring(1);
+                        boolean flagTripped = false;
+                        
+                        try
+                        {
+                            
+                        for (Field f : DrawHyperGraph.class.getDeclaredFields())
+                            if (flag.equals(f.getName()) && null != f.getDeclaredAnnotation(CommandLineConfigurable.class))
+                            {
+                                f.set(null, convertArg(f.getType(), args[++i]));
+                                flagTripped = true;
+                                break;
+                            }
+                        }
+                        catch (IllegalArgumentException | IllegalAccessException ex) 
+                        {
+                            ex.printStackTrace();
+                            // TODO: wat do
+                            return;
+                        }
+                        // TODO: make error handling not garbage
+                        if (!flagTripped)
+                            throw new IllegalArgumentException("Argument not reconginzed");
                     } break;
                 }
             }
