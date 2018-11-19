@@ -7,15 +7,16 @@ import static java.util.Arrays.asList;
 
 import java.util.ArrayList;
 
-import hypergraph.Graph;
-import hypergraph.Vertex;
-import hypergraph.Edge;
-import hypergraph.GenerateGraph;
+import definition.Graph;
+import definition.Vertex;
+import definition.Edge;
+import definition.GenerateGraph;
 import java.awt.Color;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.URISyntaxException;
 import java.util.List;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
@@ -31,18 +32,31 @@ public class DrawHyperGraph extends PApplet
     public static TreeMap<Vertex, PVector> vertexLocations;
     // track which vertex is currently being moved by the mouse
     public static Vertex held;
+    List<Graph> graphs = new ArrayList<>();
     public static Graph G;
 
-    @CommandLineConfigurable private static int vertexRadius = 30;
-    @CommandLineConfigurable private static int headingWidth = 10;
-    @CommandLineConfigurable private static int headingHeight = 15;
+    // TODO: there is a lookup for global variables for
+    @CommandLineConfigurable(description="Will increase the size of the ellipse drawn.")
+    private static int vertexRadius = 30;
     
-    @CommandLineConfigurable private static Color baseVertexColor;
+    @CommandLineConfigurable(description="Will increase the triangle width of the arrow at the end of a directed edge.")
+    private static int headingWidth = 10;
     
-    @CommandLineConfigurable private static int initialWidth;
-    @CommandLineConfigurable private static int initialHeight;
+    @CommandLineConfigurable(description="Will increase the triangle height of the arrow at the end of a directed edge. ")
+    private static int headingHeight = 15;
+    
+    @CommandLineConfigurable(description="The width of the windows that contains the drawing.")
+    private static int initialWidth = 1000;
+    @CommandLineConfigurable(description="The height of the windows that contains the drawing.")
+    private static int initialHeight = 1000;
 
-    public static final float PHI = (1 + sqrt(5)) / 2;
+    @CommandLineConfigurable(description="When edges are overlapped, TODO: changing this value does something when edges are overlapped")
+    public static float edgeOffset = (1 + sqrt(5)) / 2;
+    
+    // TODO: maybe add functionality to command line configurable
+    public static boolean fullscreen = false;
+    
+    private static Color baseVertexColor;
 
 // TODO: change font maybe
     PFont font;
@@ -56,7 +70,8 @@ public class DrawHyperGraph extends PApplet
     public void setup ()
     {
         surface.setResizable(true);
-        surface.setSize(initialWidth, initialHeight);
+        if (!fullscreen)
+            surface.setSize(initialWidth, initialHeight);
         
         // initially no vertex is being manipulated
         held = null;
@@ -98,27 +113,26 @@ public class DrawHyperGraph extends PApplet
         ArrayList<ArrayList<Edge>> equivalenceClasses = new ArrayList<>();
         
         // membership is transitive so only have to test the first element
-        BiPredicate<ArrayList<Edge>, Edge> hasSameConnectionsAsClass = 
-            (edgeClass, e) -> 
+        BiPredicate<Edge, ArrayList<Edge>> isIn = (e, edgeClass) -> 
                 edgeClass.get(0).sameConnections(e);
         
-        G.edges().forEach // if matches an equivalence class then add edge to class
-        ( edge -> equivalenceClasses.stream().
-                filter(edgeClass -> hasSameConnectionsAsClass.test(edgeClass, edge)).
-                findFirst().orElseGet(() -> 
-                {   // create new edge class since one doesn't exist
-                    ArrayList<Edge> newEdgeClass = new ArrayList<>();
-                    equivalenceClasses.add(newEdgeClass);
-                    return newEdgeClass;
-                }).
-                add(edge)
+        G.edges().forEach // matches an edge into a edge class
+        ( edge ->   equivalenceClasses.stream().
+                    filter(edgeClass -> isIn.test(edge, edgeClass)).
+                    findFirst().orElseGet(() -> 
+                    {   // create new edge class since one doesn't exist
+                        ArrayList<Edge> newEdgeClass = new ArrayList<>();
+                        equivalenceClasses.add(newEdgeClass);
+                        return newEdgeClass;
+                    }).
+                    add(edge)
         );
         
         // draw each edge such that they are offset from the previous edge
         for (ArrayList<Edge> edgeClass : equivalenceClasses)
         {
             // draw each edge offset from the other edges in the class
-            int i = 0;
+            int i = 1;
             for (Edge e : edgeClass)
                 drawEdge(e, i++);
         }
@@ -141,7 +155,7 @@ public class DrawHyperGraph extends PApplet
 
         // add an offset to the center so edges that connect the same vertices are not
         // covering eachother
-        float angle = (i * 2 * PI / (1 + PHI));
+        float angle = (i * 2 * PI / (1 + edgeOffset));
         float dist = i * vertexRadius / 2; // arbitrary distance
         PVector offset = new PVector(cos(angle) * dist, sin(angle) * dist);
         edgeCenter = edgeCenter.add(offset);
@@ -238,12 +252,15 @@ public class DrawHyperGraph extends PApplet
     }
 
     // TODO: this naming convention makes no sense
+    // TODO: can change to enums for efficiency
     public static Class translate (String type)
     {
         switch (type)
         {
             case "String": return String.class;
             case "int": case "Integer": return Integer.class;
+            case "float": case "Float": return Float.class;
+            case "double": case "Double": return Double.class;
             default: return null;
         }
     }
@@ -253,6 +270,8 @@ public class DrawHyperGraph extends PApplet
         {
             case "String": return value;
             case "int": case "Integer": return Integer.parseInt(value);
+            case "float": case "Float": return Float.parseFloat(value);
+            case "double": case "Double": return Double.parseDouble(value);
             default: return null;
         }
     }
@@ -263,36 +282,17 @@ public class DrawHyperGraph extends PApplet
         switch (type.getCanonicalName())
         {
             case "java.lang.String": return arg;
-            case "java.lang.Integer": case "int": return Integer.parseInt(arg);
-            
+            case "int": case "java.lang.Integer": return Integer.parseInt(arg);
+            case "float": case "java.lang.Float": return Float.parseFloat(arg);
+            case "double": case "java.lang.Double": return Double.parseDouble(arg);
         }
         return null;
     }
     
     public static void main (String[] args)
     {
-        boolean presenting = false;
-        boolean vertexColor = false;
-        
-        String naturalNumberPattern = "0|[1-9][0-9]*";
-        Pattern p = Pattern.compile(String.format("^\\(?(%s),(%s),(%s)\\)?$",
-                naturalNumberPattern,
-                naturalNumberPattern,
-                naturalNumberPattern));
-        
-        Function<String, Color> parseColorFromArgs = str ->
-        {
-            
-            Matcher m = p.matcher(str);
-            m.matches();
-            
-            return new Color
-            (
-                Integer.parseInt(m.group(1)),
-                Integer.parseInt(m.group(2)),
-                Integer.parseInt(m.group(3))
-            );
-        };
+        baseVertexColor = new Color(0,0,0);
+        String[] appletArgs = new String[]{"draw.DrawHyperGraph"};
         
         if (!(args == null || args.length == 0))
         {
@@ -307,13 +307,17 @@ public class DrawHyperGraph extends PApplet
                 {
                     case "-fullscreen":
                     {
-                        presenting = true;
+                        appletArgs= new String[]{"--present", "--window-color=#666666", "--hide-stop", "draw.DrawHyperGraph"};
+                        fullscreen = true;
                     } break;
                     case "-vertexColor":
                     {
-                        // TODO: make conistent with size thats
-                        baseVertexColor = parseColorFromArgs.apply(args[++i]);
-                        vertexColor = true;
+                        baseVertexColor = new Color
+                            (
+                                Integer.parseInt(args[++i]),
+                                Integer.parseInt(args[++i]),
+                                Integer.parseInt(args[++i])
+                            );
                     } break;
                     case "-size":
                     {
@@ -348,29 +352,54 @@ public class DrawHyperGraph extends PApplet
                         }
                         // TODO: make error handling not garbage
                         if (!flagTripped)
+                        {
+                            System.out.printf("Unrecognized flag %s\n", flag);
+                            // https://stackoverflow.com/questions/11158235/get-name-of-executable-jar-from-within-main-method
+                            // get name of executable if i really want it
+                            String debugArgs = String.join(" ", args);
+                            System.out.println(debugArgs);
+                            StringBuilder debugArrow = new StringBuilder();
+                            
+                            for (int index = 1; index <= i; index++)
+                                debugArrow.append(repititionsOf(" ", args[index - 1].length())).append(" ");
+                            debugArrow.append("^");
+                            System.out.println(debugArrow);
+                            
+                            
+                            System.out.println("\nValid flags:");
+                            for (Field f : DrawHyperGraph.class.getDeclaredFields())
+                            {
+                                CommandLineConfigurable config = f.getAnnotation(CommandLineConfigurable.class);
+                                if (config != null)
+                                    System.out.printf("-%s : %s\n", f.getName(), config.description());
+                            }
                             throw new IllegalArgumentException("Argument not reconginzed");
+                        }
                     } break;
                 }
             }
+            // there should be no flag errors after this point
             
+            // TODO: error message when no GenerateGraph function is specified
+            // given n argments the n - 1 - 2k arg will be a k arity function
+            // that produces a graph, n - 2k to n is k (type, identifier)
+            // parameter pairs
             String methodName = args[i++];
             int numberOfArgs = (args.length - i) / 2;
             Class[] methodArgTypes = new Class[numberOfArgs];
             Object[] methodArgs = new Object[numberOfArgs];
-
             for (int j = 0; i < args.length - 1; i += 2, j++)
             {
-
                 methodArgTypes[j] = translate(args[i]);
                 methodArgs[j] = stringToType(args[i], args[i + 1]);
             }
-
             try
             {
                 G = (Graph)GenerateGraph.class.getDeclaredMethod(methodName, methodArgTypes).invoke(null, methodArgs);
             }
             catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException | InvocationTargetException ex)
             {
+                // if generation of graph fails then printout valid methods
                 System.out.println("Invalid method as argument, valid methods:");
                 for (Method m : GenerateGraph.class.getDeclaredMethods())
                     if (!m.getName().startsWith("lambda$")) // filter out lambdas
@@ -384,24 +413,28 @@ public class DrawHyperGraph extends PApplet
             }
         }
         else
-            G = GenerateGraph.generate0();
-        
-        String[] appletArgs;
-        if (presenting)
-            appletArgs= new String[]{"--present", "--window-color=#666666", "--hide-stop", "draw.DrawHyperGraph"};
-        else 
-            appletArgs= new String[]{"draw.DrawHyperGraph"};
-        
-        if (!vertexColor)
-            baseVertexColor = new Color(0,0,0);
-        
-        if (args != null)
-        {
-            PApplet.main(appletArgs);
-        }
-        else 
-        {
-            PApplet.main(appletArgs);
-        }
+            G = GenerateGraph.generate0(); // default graph since takes 0 args
+            
+        PApplet.main(appletArgs);
     } // end main ()
+
+    private static String repititionsOf (String __, int numberOfRepititions)
+    {
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < numberOfRepititions; i++)
+            result.append(__);
+        return result.toString();
+    }
+    
+    private static String[] subList (String[] args, int start, int endExclusive)
+    {
+        String[] result = new String[endExclusive - start];
+        for (int i = start; i < endExclusive; i++)
+            result[i - start] = args[i - start];
+        return result;
+    }    
+    
 } // end class DrawHyperGraph
+
+
+// -vertexColor 255 40 60 -fullscreen -vertexRadius 60 -size 400 200 randomGraph int 8 int 4

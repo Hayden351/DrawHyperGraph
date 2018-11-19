@@ -1,5 +1,8 @@
 package draw;
 
+import java.util.ArrayList;
+import static java.util.Arrays.asList;
+
 /**
  * @author Hayden Fields
  */
@@ -16,8 +19,12 @@ public class TestClass
     }
     public static void main (String[] args)
     {
-        Integer i = null;
-        boolean b = i < 5;
-           
+        ArrayList<String> strs = new ArrayList<>(asList("1", "2", "3"));
+        
+        System.out.println(
+        
+            strs.stream().
+                reduce("", (a,b) -> a + " * " + b)
+        );
     }
 }
