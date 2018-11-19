@@ -132,7 +132,11 @@ public class DrawHyperGraph extends PApplet
         for (ArrayList<Edge> edgeClass : equivalenceClasses)
         {
             // draw each edge offset from the other edges in the class
-            int i = 1;
+            /* TODO:
+            i = 0 the 0th edge is very close to e 1th edge, however
+            i = 1 there is no edge that is at the center of the vertices
+            */
+            int i = 1; 
             for (Edge e : edgeClass)
                 drawEdge(e, i++);
         }
