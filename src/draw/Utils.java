@@ -12,4 +12,12 @@ public class Utils
         return PApplet.sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2));
     }
 
+    public static String repititionsOf (String rep, int numberOfRepititions)
+    {
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < numberOfRepititions; i++)
+            result.append(rep);
+        return result.toString();
+    }
+
 }

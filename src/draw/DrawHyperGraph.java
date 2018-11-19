@@ -32,7 +32,7 @@ public class DrawHyperGraph extends PApplet
     public static TreeMap<Vertex, PVector> vertexLocations;
     // track which vertex is currently being moved by the mouse
     public static Vertex held;
-    List<Graph> graphs = new ArrayList<>();
+    public static List<Graph> graphs = new ArrayList<>();
     public static Graph G;
 
     // TODO: there is a lookup for global variables for
@@ -136,7 +136,7 @@ public class DrawHyperGraph extends PApplet
             i = 0 the 0th edge is very close to e 1th edge, however
             i = 1 there is no edge that is at the center of the vertices
             */
-            int i = 1; 
+            int i = edgeClass.size() == 1? 0 : 1; 
             for (Edge e : edgeClass)
                 drawEdge(e, i++);
         }
@@ -171,10 +171,12 @@ public class DrawHyperGraph extends PApplet
             PVector vLoc = vertexLocations.get(v).copy();
 
             // end starts at the edges of the vertex or further if oriented
+            // TODO: add generic support for different stroke sizes
+            // end - 1 to account for stroke size
             PVector end = edgeCenter.copy().
                           sub(vLoc).
                           normalize().
-                          mult(vertexRadius + (e.orientedTowards(v)?headingHeight:0));
+                          mult((vertexRadius + 1) + (e.orientedTowards(v)?headingHeight:0));
 
             edgeSettings(); // set settings for drawing an edge line
             line(edgeCenter.x, edgeCenter.y, vLoc.x + end.x, vLoc.y + end.y);
@@ -365,7 +367,7 @@ public class DrawHyperGraph extends PApplet
                             StringBuilder debugArrow = new StringBuilder();
                             
                             for (int index = 1; index <= i; index++)
-                                debugArrow.append(repititionsOf(" ", args[index - 1].length())).append(" ");
+                                debugArrow.append(Utils.repititionsOf(" ", args[index - 1].length())).append(" ");
                             debugArrow.append("^");
                             System.out.println(debugArrow);
                             
@@ -385,6 +387,8 @@ public class DrawHyperGraph extends PApplet
             // there should be no flag errors after this point
             
             // TODO: error message when no GenerateGraph function is specified
+            if (i >= args.length)
+                return;
             // given n argments the n - 1 - 2k arg will be a k arity function
             // that produces a graph, n - 2k to n is k (type, identifier)
             // parameter pairs
@@ -397,47 +401,41 @@ public class DrawHyperGraph extends PApplet
                 methodArgTypes[j] = translate(args[i]);
                 methodArgs[j] = stringToType(args[i], args[i + 1]);
             }
+            
             try
             {
-                G = (Graph)GenerateGraph.class.getDeclaredMethod(methodName, methodArgTypes).invoke(null, methodArgs);
+                Method graphGeneratingMethod = GenerateGraph.class.getDeclaredMethod(methodName, methodArgTypes);
+                if (graphGeneratingMethod.getReturnType().equals(graphs.getClass()))
+                {
+                    graphs = (List<Graph>)graphGeneratingMethod.invoke(null, methodArgs);
+                    G = graphs.get(0);
+                }
+                else
+                {
+                    G = (Graph)graphGeneratingMethod.invoke(null, methodArgs);
+                }
             }
             catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException | InvocationTargetException ex)
             {
                 // if generation of graph fails then printout valid methods
-                System.out.println("Invalid method as argument, valid methods:");
+                System.out.printf("Invalid method %s, valid methods:\n", methodName);
                 for (Method m : GenerateGraph.class.getDeclaredMethods())
                     if (!m.getName().startsWith("lambda$")) // filter out lambdas
                         System.out.printf("%s.%s : (%s) -> %s\n", GenerateGraph.class.getName(), m.getName(), 
-                            String.join(" * ",(List<String>)
-                                new ArrayList<>(asList(m.getAnnotatedParameterTypes())).
-                                    stream().
-                                    map(x -> x.getType().getTypeName()).
-                                    collect(Collectors.toList())), Graph.class.getName());
+                            String.join(" * ",
+                                    new ArrayList<>(
+                                    asList(m.getParameterTypes())).
+                                    stream().map(x -> x.getTypeName()).
+                                    collect(Collectors.toList())),
+                                        m.getReturnType().getTypeName());
                 return;
             }
         }
-        else
+        else // no args so generate a default
             G = GenerateGraph.generate0(); // default graph since takes 0 args
-            
+
         PApplet.main(appletArgs);
     } // end main ()
-
-    private static String repititionsOf (String __, int numberOfRepititions)
-    {
-        StringBuilder result = new StringBuilder();
-        for (int i = 0; i < numberOfRepititions; i++)
-            result.append(__);
-        return result.toString();
-    }
-    
-    private static String[] subList (String[] args, int start, int endExclusive)
-    {
-        String[] result = new String[endExclusive - start];
-        for (int i = start; i < endExclusive; i++)
-            result[i - start] = args[i - start];
-        return result;
-    }    
-    
 } // end class DrawHyperGraph
 
 
