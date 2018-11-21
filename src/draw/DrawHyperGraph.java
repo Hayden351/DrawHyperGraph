@@ -40,18 +40,19 @@ public class DrawHyperGraph extends PApplet
     @CommandLineConfigurable(description="Will increase the size of the ellipse drawn.")
     private static int vertexRadius = 30;
     
-    @CommandLineConfigurable(description="Will increase the triangle width of the arrow at the end of a directed edge.")
+    @CommandLineConfigurable(description="Will increase the width of the triangles that are at the end of a directed edges.")
     private static int headingWidth = 10;
     
-    @CommandLineConfigurable(description="Will increase the triangle height of the arrow at the end of a directed edge. ")
+    @CommandLineConfigurable(description="Will increase the height of the triangles that are at the end of a directed edges.")
     private static int headingHeight = 15;
     
-    @CommandLineConfigurable(description="The width of the windows that contains the drawing.")
+    @CommandLineConfigurable(description="The width of the window that contains the drawing.")
     private static int initialWidth = 1000;
-    @CommandLineConfigurable(description="The height of the windows that contains the drawing.")
+    
+    @CommandLineConfigurable(description="The height of the window that contains the drawing.")
     private static int initialHeight = 1000;
 
-    @CommandLineConfigurable(description="When edges are overlapped, TODO: changing this value does something when edges are overlapped")
+    @CommandLineConfigurable(description="When edge offset factor when edges are overlapped.")
     public static float edgeOffset = (1 + sqrt(5)) / 2;
     
     // TODO: maybe add functionality to command line configurable
@@ -448,9 +449,9 @@ public class DrawHyperGraph extends PApplet
             }
             
         }
-        else // no args so generate a default
+        else // no arguments given
         {
-            System.out.println("Usage\n<executable> <config> <generate-graph-function> <function-arguments>");
+            System.out.println("Usage:\n<executable> <config> <generate-graph-function> <function-arguments>");
             return;
         }
 
