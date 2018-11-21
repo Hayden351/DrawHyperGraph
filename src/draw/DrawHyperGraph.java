@@ -11,14 +11,20 @@ import definition.Graph;
 import definition.Vertex;
 import definition.Edge;
 import definition.GenerateGraph;
+import definition.GraphProperties;
 import java.awt.Color;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URISyntaxException;
+import java.util.Collection;
+import java.util.Deque;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.logging.Level;
@@ -59,6 +65,8 @@ public class DrawHyperGraph extends PApplet
     public static boolean fullscreen = false;
     
     private static Color baseVertexColor;
+    
+    public static boolean tree = false;
 
 // TODO: change font maybe
     PFont font;
@@ -77,21 +85,70 @@ public class DrawHyperGraph extends PApplet
         if (!directed)
             graphs.forEach(graph -> graph.edges().forEach(edge -> edge.vertices.replaceAll((v, b) -> false)));
         
+        
         // initially no vertex is being manipulated
         held = null;
 
         // assign a random location to each vertex in the graph
         vertexLocations = new TreeMap<>();
-        for (Vertex v : G.vertices())
-            vertexLocations.put
-            (
-                v, // ->
-                new PVector
+        if (tree)
+        {
+            Set<Vertex> verticesWithNoParents = new HashSet<>(G.vertices);
+            for (Iterator<Vertex> it = verticesWithNoParents.iterator(); it.hasNext();)
+            {
+                Vertex v = it.next();
+                for (Edge e : G.edges)
+                    if (e.orientedTowards(v))
+                        it.remove();
+            }
+            
+            
+            // TODO: make less stupid
+            // breadth first search
+            Vertex root = verticesWithNoParents.iterator().next();
+            Deque<Vertex> deque = new LinkedList<>();
+            deque.offer(root);
+            float distance = vertexRadius;
+            PVector currentLocation = new PVector(width / 2, distance);
+            vertexLocations.put(root, currentLocation.copy());
+            
+            int depth = 0;
+            while (!deque.isEmpty())
+            {
+                Vertex it = deque.poll();
+                int i = 0;
+                Collection<Vertex> neighbors = GraphProperties.getNeighbors(G, it);
+                PVector previousLocation = vertexLocations.get(it);
+                for (Vertex v : neighbors)
+                {
+                    // if not visited
+                    if (!vertexLocations.keySet().contains(v))
+                    {
+                        deque.offer(v);
+                        float theta = (i * (PI) / neighbors.size()) + (PI / 8); // some value between 0 and pi / 2
+                        PVector newVertexLocation = previousLocation.copy().add(new PVector(vertexRadius * 4 * cos(theta), vertexRadius * 4 * sin(theta)));
+                        while (isOverlapped(newVertexLocation, vertexLocations.keySet()))
+                        {
+                            theta += PI / 16;
+                            newVertexLocation = newVertexLocation.add(new PVector(vertexRadius * cos(theta), vertexRadius * sin(theta)));
+                        }
+                        vertexLocations.put(v, newVertexLocation); // do something with i
+                        i++;
+                    }       
+                }
+            }
+        }
+        else 
+            for (Vertex v : G.vertices())
+                vertexLocations.put
                 (
-                    random(vertexRadius + 1, width - vertexRadius - 1),
-                    random(vertexRadius + 1, height - vertexRadius - 1)
-                )
-            );
+                    v, // ->
+                    new PVector
+                    (
+                        random(vertexRadius + 1, width - vertexRadius - 1),
+                        random(vertexRadius + 1, height - vertexRadius - 1)
+                    )
+                );
     }
 
     @Override
@@ -344,6 +401,10 @@ public class DrawHyperGraph extends PApplet
                     {
                         directed = false;
                     } break;
+                    case "-tree":
+                    {
+                        tree = true;
+                    } break;
                     default:
                     {
                         flag = flag.substring(1);
@@ -459,6 +520,21 @@ public class DrawHyperGraph extends PApplet
        
 //        PApplet.main(new String[] { "SaveMenu" });
     } // end main ()
+
+    private boolean isOverlapped (PVector vLoc, Set<Vertex> keySet)
+    {
+        for (Vertex u : keySet)
+        {
+            if (distance(vLoc, vertexLocations.get(u)) <= vertexRadius * 2)
+                return true;
+        }
+        return false;
+    }
+
+    private float distance (PVector vLoc, PVector uLoc)
+    {
+        return Utils.distance(vLoc.x, vLoc.y, uLoc.x, uLoc.y);
+    }
 } // end class DrawHyperGraph
 
 
