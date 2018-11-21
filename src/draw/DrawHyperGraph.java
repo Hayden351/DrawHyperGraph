@@ -17,6 +17,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URISyntaxException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
@@ -172,7 +173,7 @@ public class DrawHyperGraph extends PApplet
 
             // end starts at the edges of the vertex or further if oriented
             // TODO: add generic support for different stroke sizes
-            // end - 1 to account for stroke size
+            // end + 1 to account for stroke size
             PVector end = edgeCenter.copy().
                           sub(vLoc).
                           normalize().
@@ -415,26 +416,35 @@ public class DrawHyperGraph extends PApplet
                     G = (Graph)graphGeneratingMethod.invoke(null, methodArgs);
                 }
             }
-            catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException | InvocationTargetException ex)
+            catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException ex)
             {
                 // if generation of graph fails then printout valid methods
                 System.out.printf("Invalid method %s, valid methods:\n", methodName);
                 for (Method m : GenerateGraph.class.getDeclaredMethods())
-                    if (!m.getName().startsWith("lambda$")) // filter out lambdas
-                        System.out.printf("%s.%s : (%s) -> %s\n", GenerateGraph.class.getName(), m.getName(), 
-                            String.join(" * ",
-                                    new ArrayList<>(
-                                    asList(m.getParameterTypes())).
-                                    stream().map(x -> x.getTypeName()).
-                                    collect(Collectors.toList())),
-                                        m.getReturnType().getTypeName());
+                    // A.containsAll(B) iff B subseteq A
+                    if (new HashSet<>(asList(Integer.class, int.class, float.class, Float.class, String.class)).containsAll(new HashSet<>(asList(m.getParameterTypes()))))
+                        if (!m.getName().startsWith("lambda$")) // filter out lambdas
+                            System.out.printf("%s.%s : (%s) -> %s\n", GenerateGraph.class.getName(), m.getName(), 
+                                String.join(" * ",
+                                        new ArrayList<>(
+                                        asList(m.getParameterTypes())).
+                                        stream().map(x -> x.getTypeName()).
+                                        collect(Collectors.toList())),
+                                            m.getReturnType().getTypeName());
+                return;
+            } catch (InvocationTargetException ex)
+            {
+                ex.getCause().printStackTrace();
                 return;
             }
+            
         }
         else // no args so generate a default
             G = GenerateGraph.generate0(); // default graph since takes 0 args
 
         PApplet.main(appletArgs);
+       
+//        PApplet.main(new String[] { "SaveMenu" });
     } // end main ()
 } // end class DrawHyperGraph
 
