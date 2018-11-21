@@ -73,6 +73,8 @@ public class DrawHyperGraph extends PApplet
         surface.setResizable(true);
         if (!fullscreen)
             surface.setSize(initialWidth, initialHeight);
+        if (!directed)
+            graphs.forEach(graph -> graph.edges().forEach(edge -> edge.vertices.replaceAll((v, b) -> false)));
         
         // initially no vertex is being manipulated
         held = null;
@@ -137,7 +139,7 @@ public class DrawHyperGraph extends PApplet
             i = 0 the 0th edge is very close to e 1th edge, however
             i = 1 there is no edge that is at the center of the vertices
             */
-            int i = edgeClass.size() == 1? 0 : 1; 
+            int i = edgeClass.size() <= 3 ? 0 : 1; 
             for (Edge e : edgeClass)
                 drawEdge(e, i++);
         }
@@ -296,6 +298,8 @@ public class DrawHyperGraph extends PApplet
         return null;
     }
     
+    // TODO: move and maybe 
+    public static boolean directed = true;
     public static void main (String[] args)
     {
         baseVertexColor = new Color(0,0,0);
@@ -334,6 +338,10 @@ public class DrawHyperGraph extends PApplet
                         // or arguments are not valid natural numbers
                         initialWidth = Integer.parseInt(args[++i]);
                         initialHeight = Integer.parseInt(args[++i]);
+                    } break;
+                    case "-undirected":
+                    {
+                        directed = false;
                     } break;
                     default:
                     {
@@ -414,6 +422,7 @@ public class DrawHyperGraph extends PApplet
                 else
                 {
                     G = (Graph)graphGeneratingMethod.invoke(null, methodArgs);
+                    graphs.add(G);
                 }
             }
             catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException ex)
@@ -422,7 +431,7 @@ public class DrawHyperGraph extends PApplet
                 System.out.printf("Invalid method %s, valid methods:\n", methodName);
                 for (Method m : GenerateGraph.class.getDeclaredMethods())
                     // A.containsAll(B) iff B subseteq A
-                    if (new HashSet<>(asList(Integer.class, int.class, float.class, Float.class, String.class)).containsAll(new HashSet<>(asList(m.getParameterTypes()))))
+                    if (new HashSet<>(asList(Integer.class, int.class, float.class, Float.class, boolean.class, Boolean.class, String.class)).containsAll(new HashSet<>(asList(m.getParameterTypes()))))
                         if (!m.getName().startsWith("lambda$")) // filter out lambdas
                             System.out.printf("%s.%s : (%s) -> %s\n", GenerateGraph.class.getName(), m.getName(), 
                                 String.join(" * ",
@@ -440,7 +449,10 @@ public class DrawHyperGraph extends PApplet
             
         }
         else // no args so generate a default
-            G = GenerateGraph.generate0(); // default graph since takes 0 args
+        {
+            System.out.println("Usage\n<executable> <config> <generate-graph-function> <function-arguments>");
+            return;
+        }
 
         PApplet.main(appletArgs);
        
