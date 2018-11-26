@@ -83,10 +83,10 @@ public class DrawHyperGraph extends PApplet
         //surface.setResizable(true);
         if (fullscreen)
         {
-            fullScreen();
-//            surface.setSize(displayWidth, displayHeight);
-//            width = displayWidth;
-//            height = displayHeight;
+//            fullScreen();
+            surface.setSize(displayWidth, displayHeight);
+            width = displayWidth;
+            height = displayHeight;
         }
         else
             surface.setSize(initialWidth, initialHeight);
@@ -295,26 +295,26 @@ public class DrawHyperGraph extends PApplet
         else if (zoomingOut)
         {
             vertexRadius += .125f;
-            if (vertexRadius >= (width + height) / 8)
-                vertexRadius = (width + height) / 8;
+            if (vertexRadius >= 500)
+                vertexRadius = 500;
             else 
                 for (Vertex v : vertexLocations.keySet())
                     vertexLocations.get(v).add(PVector.fromAngle(angleBetween(new PVector(width / 2, height / 2), vertexLocations.get(v))).normalize().mult(.25f));
         }
         
-        float movementSpeed = 2;
+        float movementSpeed = 6;
         if (movingUp)
             for (Vertex v : vertexLocations.keySet())
-                vertexLocations.get(v).add(PVector.fromAngle(3 * PI / 2).normalize().mult(movementSpeed));
+                vertexLocations.get(v).add(PVector.fromAngle(PI / 2).normalize().mult(movementSpeed));
         if (movingRight)
             for (Vertex v : vertexLocations.keySet())
-                vertexLocations.get(v).add(PVector.fromAngle(0).normalize().mult(movementSpeed));
+                vertexLocations.get(v).add(PVector.fromAngle(PI).normalize().mult(movementSpeed));
         if (movingDown)
             for (Vertex v : vertexLocations.keySet())
-                vertexLocations.get(v).add(PVector.fromAngle(PI / 2).normalize().mult(movementSpeed));
+                vertexLocations.get(v).add(PVector.fromAngle(3 * PI / 2).normalize().mult(movementSpeed));
         if (movingLeft)
             for (Vertex v : vertexLocations.keySet())
-                vertexLocations.get(v).add(PVector.fromAngle(PI).normalize().mult(movementSpeed));
+                vertexLocations.get(v).add(PVector.fromAngle(0).normalize().mult(movementSpeed));
     }
 
     @Override
