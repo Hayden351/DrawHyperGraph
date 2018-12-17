@@ -10,13 +10,14 @@ import java.util.ArrayList;
 import definition.Graph;
 import definition.Vertex;
 import definition.Edge;
-import definition.GenerateGraph;
+import generate.GenerateGraph;
 import definition.GraphProperties;
 import java.awt.Color;
 import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.ParameterizedType;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -36,10 +37,15 @@ public class DrawHyperGraph extends PApplet
     // track which vertex is currently being moved by the mouse
     public static Vertex held;
     public static List<Graph> graphs = new ArrayList<>();
-    public static Graph G;
+    public static int currentGraph = 0;
+    // TODO: do we need G at all?
+    /*
+    can refer to G or graphs.get(currentGraph)
+    */
+//    public static Graph G;
 
     // TODO: there is a lookup for global variables for
-    @CommandLineConfigurable(description="Will increase the size of the ellipse drawn.")
+    @CommandLineConfigurable(description="The radius of the circle the represents a vertex in the graph.")
     private static float vertexRadius = 30;
     
     @CommandLineConfigurable(description="Will increase the width of the triangles that are at the end of a directed edges.")
@@ -49,12 +55,12 @@ public class DrawHyperGraph extends PApplet
     private static float headingHeight = 15;
     
     @CommandLineConfigurable(description="The width of the window that contains the drawing.")
-    private static int initialWidth;
+    private static int initialWidth = 500;
     
     @CommandLineConfigurable(description="The height of the window that contains the drawing.")
-    private static int initialHeight;
+    private static int initialHeight = 500;
 
-    @CommandLineConfigurable(description="When edge offset factor when edges are overlapped.")
+    @CommandLineConfigurable(description="The edge offset factor when edges are overlapped.")
     public static float edgeOffset = (1 + sqrt(5)) / 2;
     
     public static boolean noOutOfBounds = false;
@@ -79,8 +85,7 @@ public class DrawHyperGraph extends PApplet
     @Override
     public void setup ()
     {
-        // TODO: don't allow resizing until we can support it
-        //surface.setResizable(true);
+        surface.setResizable(true);
         if (fullscreen)
         {
 //            fullScreen();
@@ -93,6 +98,7 @@ public class DrawHyperGraph extends PApplet
         
         
         // set each edge to not be directed towards any of its vertices
+        // TODO: we shouldn't change the graph, we just want to change how we draw the graph
         if (!directed)
             graphs.forEach(graph -> graph.edges().forEach(edge -> edge.vertices.replaceAll((v, b) -> false)));
         
@@ -103,119 +109,16 @@ public class DrawHyperGraph extends PApplet
         // assign a random location to each vertex in the graph
         vertexLocations = new TreeMap<>();
         
-        // draws as a rooted tree
-        
         // start at center
+        // TODO: we don't neccessarily want to apply the same placemnt algorithm 
+        //       to all to graphs in the list
+        //
         if (tree)
-        {
-            Set<Vertex> verticesWithNoParents = new HashSet<>(G.vertices);
-            for (Iterator<Vertex> it = verticesWithNoParents.iterator(); it.hasNext();)
-            {
-                Vertex v = it.next();
-                for (Edge e : G.edges)
-                    if (e.orientedTowards(v))
-                    {
-                        it.remove();
-                        break;
-                    }
-            }
-//            Vertex src = verticesWithNoParents.iterator().next(); // src is root
-            
-            // initialize visited map
-            Map<Vertex, Boolean> visited = new HashMap<>(); // TODO: can replace with vertexLocations
-            for (Vertex v : G.vertices)
-                visited.put(v, Boolean.FALSE);
-            
-            Queue<Vertex> vertexQueue = new LinkedList<>();
-            
-            for (Vertex src : verticesWithNoParents)
-            {
-                vertexQueue.add(src);
-                visited.put(src, Boolean.TRUE);
-                vertexLocations.put(src, new PVector(vertexRadius *2, vertexRadius * 2));
-            }
-            
-            while (!vertexQueue.isEmpty())
-            {
-                Vertex v = vertexQueue.remove();
-                System.out.printf("%s :", v);
-                
-                Collection<Vertex> neighbors = GraphProperties.getNeighbors(G, v);
-                
-                int j = 0;
-                for (Vertex u : neighbors)
-                {
-                    System.out.printf(" %s", u);
-                    
-                    if (!visited.get(u))
-                    {
-                        // want to head 4 vertex radii away
-                        // there are n vertcies
-                        // r = (4v / n) distance each iteration
-                        // average theta = 0; // use average theta for direction afterwards
-                        // for v : V(G)
-                        //     theta = angle from vector from vertex to initial posiiton
-                        //     posiiton += (r * cos(theta), r * sin(theta))
-                        // if overlapped travel vertex radius distance in average theta
-                        // if hit edge then bounce
-                        vertexQueue.add(u);
-                        visited.put(u, Boolean.TRUE); // after vertex is visited we place it on the canvas
-                        // TODO: check location befoer putting it if overlap 
-                        //       find average angle away then move/bounce
-                        float rad = 2 * vertexRadius / vertexLocations.keySet().size();
-                        
-                        // initial position is the parent
-                        // for each vertex r that already has a location
-                        // move it a little away from r
-                        float angleFromParent = 3 * PI / 4 * j++ / neighbors.size();
-                        PVector placementLocation = vertexLocations.get(v).copy().
-                                                        add(PVector.fromAngle(angleFromParent).
-                                                        mult(2 * vertexRadius));
-                        
-//                        for (Vertex r : vertexLocations.keySet())
-//                        {
-//                            float angleBetween = angleBetween(vertexLocations.get(r), placementLocation);
-////                            System.out.println(angleBetween);
-//                            placementLocation.add(PVector.fromAngle(angleBetween).normalize().mult(rad));
-//                        }
-                        
-                        int giveUp = width * height;
-                        while (isLocationAwayFrom(placementLocation, vertexLocations, vertexRadius * 3))
-                        {
-                            PVector newLocation  = placementLocation.copy().add(new PVector(5 * cos(angleFromParent), 5 * sin(angleFromParent)));
-  
-                            // move or change direction
-                            if (!(0 <= newLocation.x && newLocation.x <= width && rad <= newLocation.y && newLocation.y <= height))
-                              angleFromParent += (2 * PI / PHI);
-                            else
-                              placementLocation = newLocation;
-                            if (giveUp-- <= 0)
-                                break;
-                        }
-                        vertexLocations.put(u, placementLocation);
-                        
-                    }
-                }
-                System.out.println("");
-            }
-            
-            // move back into bounds
-            for (Vertex v : G.vertices)
-                vertexLocations.put(v, new PVector(
-                            constrain(vertexLocations.get(v).x, vertexRadius + 1, width - vertexRadius - 1),
-                            constrain(vertexLocations.get(v).y, vertexRadius + 1, height - vertexRadius - 1)));
-        }
-        else 
-            for (Vertex v : G.vertices())
-                vertexLocations.put
-                (
-                    v, // ->
-                    new PVector
-                    (
-                        random(vertexRadius + 1, width - vertexRadius - 1),
-                        random(vertexRadius + 1, height - vertexRadius - 1)
-                    )
-                );
+            for (Graph G : graphs)
+                placeVerticesTree(G);
+        else
+            for (Graph G : graphs)
+                placeVerticesRandom(G);
     }
     
     // i don't know maybe this will help
@@ -232,7 +135,15 @@ public class DrawHyperGraph extends PApplet
             {
                 zoomingOut = true;
             } break;
-        }
+            case 'a':
+            {
+                currentGraph = constrain(currentGraph - 1, 0, graphs.size() - 1);
+            } break;
+            case 'd':
+            {
+                currentGraph = constrain(currentGraph + 1, 0, graphs.size() - 1);
+            } break;
+        } 
         switch (keyCode)
         {
             case UP:
@@ -325,7 +236,7 @@ public class DrawHyperGraph extends PApplet
         handleInput();
         
         // draw vertices
-        for (Vertex v : G.vertices())
+        for (Vertex v : graphs.get(currentGraph).vertices())
         {
             PVector vLoc = vertexLocations.get(v);
 
@@ -345,7 +256,7 @@ public class DrawHyperGraph extends PApplet
         BiPredicate<Edge, ArrayList<Edge>> isIn = (e, edgeClass) -> 
                 edgeClass.get(0).sameConnections(e);
         
-        G.edges().forEach // matches an edge into a edge class
+        graphs.get(currentGraph).edges().forEach // matches an edge into a edge class
         ( edge ->   equivalenceClasses.stream().
                     filter(edgeClass -> isIn.test(edge, edgeClass)).
                     findFirst().orElseGet(() -> 
@@ -374,7 +285,7 @@ public class DrawHyperGraph extends PApplet
         if (held != null)
             vertexLocations.put(held, new PVector(mouseX, mouseY));
         if (noOutOfBounds)
-            for (Vertex v : G.vertices) // TODO: there is a much nicer way of doing this using map methods
+            for (Vertex v : graphs.get(currentGraph).vertices) // TODO: there is a much nicer way of doing this using map methods
                 vertexLocations.put(v, new PVector(
                     constrain(vertexLocations.get(v).x, vertexRadius + 1, width - vertexRadius - 1),
                     constrain(vertexLocations.get(v).y, vertexRadius + 1, height - vertexRadius - 1)
@@ -449,7 +360,7 @@ public class DrawHyperGraph extends PApplet
     public void mousePressed ()
     {
         // hold vertex that mouse is hovering over
-        for (Vertex v : G.vertices())
+        for (Vertex v : graphs.get(currentGraph).vertices())
         {
             PVector vLoc = vertexLocations.get(v);
             if (Utils.distance(mouseX, mouseY, vLoc.x, vLoc.y) <= vertexRadius)
@@ -625,13 +536,9 @@ public class DrawHyperGraph extends PApplet
                             
                             
                             System.out.println("\nValid flags:");
-                            for (Field f : DrawHyperGraph.class.getDeclaredFields())
-                            {
-                                CommandLineConfigurable config = f.getAnnotation(CommandLineConfigurable.class);
-                                if (config != null)
-                                    System.out.printf("-%s : %s\n", f.getName(), config.description());
-                            }
-                            throw new IllegalArgumentException("Argument not reconginzed");
+                            printValidFlags();
+                            
+                            throw new IllegalArgumentException("Argument not recognized");
                         }
                     } break;
                 }
@@ -656,33 +563,27 @@ public class DrawHyperGraph extends PApplet
             
             try
             {
-                Method graphGeneratingMethod = GenerateGraph.class.getDeclaredMethod(methodName, methodArgTypes);
-                if (graphGeneratingMethod.getReturnType().equals(graphs.getClass()))
+                Method graphGeneratingMethod = GenerateGraph.class.getMethod(methodName, methodArgTypes);
+               
+                System.out.printf("%s %s\n", graphGeneratingMethod.getReturnType(), graphs.getClass());
+                if (Graph.class.equals(graphGeneratingMethod.getReturnType()))
                 {
-                    graphs = (List<Graph>)graphGeneratingMethod.invoke(null, methodArgs);
-                    G = graphs.get(0);
+//                    G = (Graph)graphGeneratingMethod.invoke(null, methodArgs);
+                    graphs.add((Graph)graphGeneratingMethod.invoke(null, methodArgs));
                 }
                 else
                 {
-                    G = (Graph)graphGeneratingMethod.invoke(null, methodArgs);
-                    graphs.add(G);
+                    graphs = (List<Graph>)graphGeneratingMethod.invoke(null, methodArgs);
+//                    G = graphs.get(0);
                 }
             }
             catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException ex)
             {
                 // if generation of graph fails then printout valid methods
                 System.out.printf("Invalid method %s, valid methods:\n", methodName);
-                for (Method m : GenerateGraph.class.getDeclaredMethods())
-                    // A.containsAll(B) iff B subseteq A
-                    if (new HashSet<>(asList(Integer.class, int.class, float.class, Float.class, boolean.class, Boolean.class, String.class)).containsAll(new HashSet<>(asList(m.getParameterTypes()))))
-                        if (!m.getName().startsWith("lambda$")) // filter out lambdas
-                            System.out.printf("%s.%s : (%s) -> %s\n", GenerateGraph.class.getName(), m.getName(), 
-                                String.join(" * ",
-                                        new ArrayList<>(
-                                        asList(m.getParameterTypes())).
-                                        stream().map(x -> x.getTypeName()).
-                                        collect(Collectors.toList())),
-                                            m.getReturnType().getTypeName());
+                
+                printUsableMethods();
+                
                 return;
             } catch (InvocationTargetException ex)
             {
@@ -694,6 +595,15 @@ public class DrawHyperGraph extends PApplet
         else // no arguments given
         {
             System.out.println("Usage:\n<executable> <config> <generate-graph-function> <function-arguments>");
+            System.out.println("");
+            
+            System.out.println("Valid <config> flags");
+            printValidFlags();
+            System.out.println("");
+            
+            System.out.println("Valid <generate-graph-function> functions");
+            printUsableMethods();
+            System.out.println("");
             return;
         }
 
@@ -701,21 +611,153 @@ public class DrawHyperGraph extends PApplet
        
 //        PApplet.main(new String[] { "SaveMenu" });
     } // end main ()
-
-    // is true if the given location is away from the given locations by at least
-    // distance amount
-    private boolean isLocationAwayFrom (PVector location, Map<Vertex, PVector> locations, float distance)
+    
+    
+    private static void printUsableMethods ()
     {
-        for (Vertex u : locations.keySet())
-            if (distance(location, locations.get(u)) <= distance)
-                return true;
-        return false;
+        for (Method m : GenerateGraph.class.getMethods())
+            // A.containsAll(B) iff B subseteq A
+            if (new HashSet<>(asList(Integer.class, int.class, float.class, Float.class, boolean.class, Boolean.class, String.class)).containsAll(new HashSet<>(asList(m.getParameterTypes()))))
+                if (!m.getName().startsWith("lambda$")) // filter out lambdas
+                    if (Graph.class.equals(m.getReturnType())
+                        || (m.getGenericReturnType() instanceof ParameterizedType
+                            && Graph.class.equals(((ParameterizedType)m.getGenericReturnType()).getActualTypeArguments()[0])))
+                        System.out.printf("%s.%s : (%s) -> %s\n", 
+                            GenerateGraph.class.getName(), 
+                            m.getName(), 
+                            String.join(" * ",
+                                    new ArrayList<>(asList(m.getParameterTypes())).
+                                        stream().
+                                            map(x -> x.getTypeName()).
+                                            collect(Collectors.toList())),
+                            m.getReturnType().getTypeName());
+    }
+    private static void printValidFlags ()
+    {
+        for (Field f : DrawHyperGraph.class.getDeclaredFields())
+        {
+            CommandLineConfigurable config = f.getAnnotation(CommandLineConfigurable.class);
+            if (config != null)
+                System.out.printf("-%s : %s\n", f.getName(), config.description());
+        }
     }
 
-    private float distance (PVector vLoc, PVector uLoc)
+    private void placeVerticesTree (Graph G)
     {
-        return Utils.distance(vLoc.x, vLoc.y, uLoc.x, uLoc.y);
+        Set<Vertex> verticesWithNoParents = new HashSet<>(G.vertices);
+            for (Iterator<Vertex> it = verticesWithNoParents.iterator(); it.hasNext();)
+            {
+                Vertex v = it.next();
+                for (Edge e : G.edges)
+                    if (e.orientedTowards(v))
+                    {
+                        it.remove();
+                        break;
+                    }
+            }
+//            Vertex src = verticesWithNoParents.iterator().next(); // src is root
+            
+            // initialize visited map
+            Map<Vertex, Boolean> visited = new HashMap<>(); // TODO: can replace with vertexLocations
+            for (Vertex v : G.vertices)
+                visited.put(v, Boolean.FALSE);
+            
+            Queue<Vertex> vertexQueue = new LinkedList<>();
+            
+            for (Vertex src : verticesWithNoParents)
+            {
+                vertexQueue.add(src);
+                visited.put(src, Boolean.TRUE);
+                vertexLocations.put(src, new PVector(vertexRadius *2, vertexRadius * 2));
+            }
+            
+            while (!vertexQueue.isEmpty())
+            {
+                Vertex v = vertexQueue.remove();
+                System.out.printf("%s :", v);
+                
+                Collection<Vertex> neighbors = GraphProperties.getNeighbors(G, v);
+                
+                int j = 0;
+                for (Vertex u : neighbors)
+                {
+                    System.out.printf(" %s", u);
+                    
+                    if (!visited.get(u))
+                    {
+                        // want to head 4 vertex radii away
+                        // there are n vertcies
+                        // r = (4v / n) distance each iteration
+                        // average theta = 0; // use average theta for direction afterwards
+                        // for v : V(G)
+                        //     theta = angle from vector from vertex to initial posiiton
+                        //     posiiton += (r * cos(theta), r * sin(theta))
+                        // if overlapped travel vertex radius distance in average theta
+                        // if hit edge then bounce
+                        vertexQueue.add(u);
+                        visited.put(u, Boolean.TRUE); // after vertex is visited we place it on the canvas
+                        // TODO: check location befoer putting it if overlap 
+                        //       find average angle away then move/bounce
+                        float rad = 2 * vertexRadius / vertexLocations.keySet().size();
+                        
+                        // initial position is the parent
+                        // for each vertex r that already has a location
+                        // move it a little away from r
+                        float angleFromParent = 3 * PI / 4 * j++ / neighbors.size();
+                        PVector placementLocation = vertexLocations.get(v).copy().
+                                                        add(PVector.fromAngle(angleFromParent).
+                                                        mult(2 * vertexRadius));
+                        
+//                        for (Vertex r : vertexLocations.keySet())
+//                        {
+//                            float angleBetween = angleBetween(vertexLocations.get(r), placementLocation);
+////                            System.out.println(angleBetween);
+//                            placementLocation.add(PVector.fromAngle(angleBetween).normalize().mult(rad));
+//                        }
+                        
+                        // TODO: this logic is kind of wonky
+                        int giveUp = width * height;
+                        while (Utils.isLocationAwayFrom(placementLocation, vertexLocations, vertexRadius * 3))
+                        {
+                            PVector newLocation  = placementLocation.copy().add(new PVector(5 * cos(angleFromParent), 5 * sin(angleFromParent)));
+  
+                            // move or change direction
+                            if (!(0 <= newLocation.x && newLocation.x <= width && rad <= newLocation.y && newLocation.y <= height))
+                              angleFromParent += (2 * PI / PHI);
+                            else
+                              placementLocation = newLocation;
+                            if (giveUp-- <= 0)
+                                break;
+                        }
+                        vertexLocations.put(u, placementLocation);
+                        
+                    }
+                }
+                System.out.println("");
+            }
+            
+            // move back into bounds
+            for (Vertex v : G.vertices)
+                vertexLocations.put(v, new PVector(
+                            constrain(vertexLocations.get(v).x, vertexRadius + 1, width - vertexRadius - 1),
+                            constrain(vertexLocations.get(v).y, vertexRadius + 1, height - vertexRadius - 1)));
     }
+
+    private void placeVerticesRandom (Graph G)
+    {
+        for (Vertex v : G.vertices())
+            vertexLocations.put
+            (
+                v, // ->
+                new PVector
+                (
+                    random(vertexRadius + 1, width - vertexRadius - 1),
+                    random(vertexRadius + 1, height - vertexRadius - 1)
+                )
+            );
+    }
+
+
 } // end class DrawHyperGraph
 
 
