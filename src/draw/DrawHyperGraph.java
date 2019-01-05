@@ -36,6 +36,7 @@ public class DrawHyperGraph extends PApplet
     public static TreeMap<Vertex, PVector> vertexLocations;
     // track which vertex is currently being moved by the mouse
     public static Vertex held;
+    public static PVector heldOffset;
     public static List<Graph> graphs = new ArrayList<>();
     public static int currentGraph = 0;
     // TODO: do we need G at all?
@@ -62,6 +63,11 @@ public class DrawHyperGraph extends PApplet
 
     @CommandLineConfigurable(description="The edge offset factor when edges are overlapped.")
     public static float edgeOffset = (1 + sqrt(5)) / 2;
+    
+    public PVector topLeftCameraOffsetFromOrigin = new PVector(0, 0);
+    
+    public float horizantalPanIncrement = 6;
+    public float verticalPanIncrement = 6;
     
     public static boolean noOutOfBounds = false;
     
@@ -105,6 +111,7 @@ public class DrawHyperGraph extends PApplet
         
         // initially no vertex is being manipulated
         held = null;
+        heldOffset = new PVector(0, 0);
 
         // assign a random location to each vertex in the graph
         vertexLocations = new TreeMap<>();
@@ -216,13 +223,13 @@ public class DrawHyperGraph extends PApplet
         float movementSpeed = 6;
         if (movingUp)
             for (Vertex v : vertexLocations.keySet())
-                vertexLocations.get(v).add(PVector.fromAngle(PI / 2).normalize().mult(movementSpeed));
+                vertexLocations.get(v).add(PVector.fromAngle(PI / 2).normalize().mult(verticalPanIncrement));
         if (movingRight)
             for (Vertex v : vertexLocations.keySet())
-                vertexLocations.get(v).add(PVector.fromAngle(PI).normalize().mult(movementSpeed));
+                vertexLocations.get(v).add(PVector.fromAngle(PI).normalize().mult(this.horizantalPanIncrement));
         if (movingDown)
             for (Vertex v : vertexLocations.keySet())
-                vertexLocations.get(v).add(PVector.fromAngle(3 * PI / 2).normalize().mult(movementSpeed));
+                vertexLocations.get(v).add(PVector.fromAngle(3 * PI / 2).normalize().mult(verticalPanIncrement));
         if (movingLeft)
             for (Vertex v : vertexLocations.keySet())
                 vertexLocations.get(v).add(PVector.fromAngle(0).normalize().mult(movementSpeed));
@@ -231,6 +238,7 @@ public class DrawHyperGraph extends PApplet
     @Override
     public void draw ()
     {
+        System.out.println(this.topLeftCameraOffsetFromOrigin);
         background(255);
 
         handleInput();
@@ -283,7 +291,7 @@ public class DrawHyperGraph extends PApplet
 
         // move held vertex to the mouse
         if (held != null)
-            vertexLocations.put(held, new PVector(mouseX, mouseY));
+            vertexLocations.put(held, new PVector(mouseX, mouseY).add(heldOffset));
         if (noOutOfBounds)
             for (Vertex v : graphs.get(currentGraph).vertices) // TODO: there is a much nicer way of doing this using map methods
                 vertexLocations.put(v, new PVector(
@@ -292,18 +300,76 @@ public class DrawHyperGraph extends PApplet
                 ));
     }
 
-    public void drawEdge(Edge e, int i)
+    public static float TAU = PI * 2;
+    public void drawEdge (Edge e, int i)
     {
         // the center of a edge is the average of all the positions of all the
         // positions of the vertices that are connected by this edge
-        PVector edgeCenter = e.vertices().stream().
-                                map(v -> vertexLocations.get(v)).
-                                reduce
-                                (
-                                    new PVector(0, 0), 
-                                    (a,b) -> new PVector(a.x + b.x, a.y + b.y)
-                                ).
-                                div(e.vertices().size());
+        PVector edgeCenter;
+        if (e.vertices().size() == 1) // is self loop
+        {
+            PVector vLoc = vertexLocations.get(e.vertices().iterator().next());
+            
+            boolean isDirected = e.vertices.values().stream().anyMatch(x -> x);
+            // TODO: wat do if self loop. right now is just a line above the vertex
+//            float theta = (TAU * 8) / 16 + (TAU / 4 - asin(1/sqrt(5)));
+            float theta = (12 * TAU - 16 * asin(1/sqrt(5))) / 16;
+            
+            // adj = vertexRadius / 2
+            // opp = vertexRadius
+            // hyp = sqrt(4 + 1) * vertexRadius / 2
+            // sin (angle) = 1 / sqrt(5)
+            
+            List<PVector> vectors = new ArrayList<>(asList(
+                vLoc.copy().add(PVector.fromAngle(theta).mult(vertexRadius)),
+                new PVector(0, -vertexRadius * (i + 1)),
+                new PVector(vertexRadius * (i + 1), 0)
+            ));
+            vectors.add(new PVector(0, vertexRadius - (isDirected?headingHeight:0)));
+            
+            PVector end = relativeLine(vectors);
+            
+//            line(vLoc.x - vertexRadius * cos(theta),
+//                 vLoc.y - vertexRadius * sin(theta),
+//                 vLoc.x - vertexRadius * cos(theta),
+//                 vLoc.y - vertexRadius * sin(theta) - vertexRadius);
+//
+//            // draw line up from edge of vertex on right sight
+//            line(
+//                vLoc.x + vertexRadius * cos(theta),
+//                vLoc.y - (vertexRadius + (headingHeight + 3) * (isDirected ? 1 : 0)) * (float) Math.sin(theta),
+//                vLoc.x + vertexRadius * cos(theta),
+//                vLoc.y - vertexRadius * sin(theta) - vertexRadius);
+//
+//            // draw line between them
+//            line(vLoc.x - vertexRadius * cos(theta), 
+//                 vLoc.y - vertexRadius * sin(theta) - vertexRadius, 
+//                 vLoc.x + vertexRadius * cos(theta), 
+//                 vLoc.y - vertexRadius * sin(theta) - vertexRadius);
+
+            // add arrow to tip of edge
+            if (isDirected)
+            {
+                strokeWeight(1);
+                stroke(0);
+                drawHeading(end.x,
+                            end.y,
+                            PI / 2,
+                            headingWidth,
+                            headingHeight);
+            }
+            return;
+        }
+        
+            
+        edgeCenter = e.vertices().stream().
+                            map(v -> vertexLocations.get(v)).
+                            reduce
+                            (
+                                new PVector(0, 0), 
+                                (a,b) -> new PVector(a.x + b.x, a.y + b.y)
+                            ).
+                            div(e.vertices().size());
 
         // add an offset to the center so edges that connect the same vertices are not
         // covering eachother
@@ -338,7 +404,13 @@ public class DrawHyperGraph extends PApplet
         }
     } // end drawEdge ()
 
-    public void drawHeading(PVector startHeading, float angle, float headingWidth, float headingHeight) {
+    public void drawHeading(float startHeadingX, float startHeadingY, float angle, float headingWidth, float headingHeight)
+    {
+        drawHeading(new PVector(startHeadingX, startHeadingY), angle, headingWidth, headingHeight);
+    }
+    
+    public void drawHeading(PVector startHeading, float angle, float headingWidth, float headingHeight)
+    {
         PVector leftPoint = startHeading.copy().add(PVector.fromAngle(angle + PI / 2).mult(headingWidth / 2));
         PVector rightPoint = startHeading.copy().add(PVector.fromAngle(angle - PI / 2).mult(headingWidth / 2));
         PVector forwardPoint = startHeading.copy().add(PVector.fromAngle(angle).mult(headingHeight));
@@ -355,6 +427,39 @@ public class DrawHyperGraph extends PApplet
     {
         return atan2(end.y - start.y, end.x - start.x);
     }
+    public PVector vectorFromTo(PVector start, PVector end)
+    {
+        return new PVector(end.x - start.x, end.y - start.y);
+    }
+    public PVector vectorFromTo(float startx, float starty, float endx, float endy)
+    {
+        return new PVector(endx - startx, endy - starty);
+    }
+    
+    /*
+    
+    we start at top left is (0, 0) to (width, height)
+    
+    */
+    public void shiftCamera(PVector amount)
+    {
+        topLeftCameraOffsetFromOrigin.add(amount);
+    }
+    
+    public void toCenter()
+    {
+        PVector graphCenter = 
+            graphs.get(currentGraph).vertices.stream().
+            map(v -> vertexLocations.get(v)).
+            reduce
+            (
+                new PVector(0, 0), 
+                (a,b) -> new PVector(a.x + b.x, a.y + b.y)
+            ).
+            div(graphs.get(currentGraph).vertices.size());
+        
+        
+    }
 
     @Override
     public void mousePressed ()
@@ -366,6 +471,7 @@ public class DrawHyperGraph extends PApplet
             if (Utils.distance(mouseX, mouseY, vLoc.x, vLoc.y) <= vertexRadius)
             {
                 held = v;
+                heldOffset = vectorFromTo(mouseX, mouseY, vLoc.x, vLoc.y);
                 return;
             }
         }
@@ -563,19 +669,17 @@ public class DrawHyperGraph extends PApplet
             
             try
             {
+                // seems like this doesn't generalize very well in that
+                // The GenerateGraph class will get larger and larger
+                // although could have a type hierarchy where each node in the
+                // path a different set of graph generating algorithms
+                // TODO: implement a way of invoking multiple menthods
                 Method graphGeneratingMethod = GenerateGraph.class.getMethod(methodName, methodArgTypes);
                
-                System.out.printf("%s %s\n", graphGeneratingMethod.getReturnType(), graphs.getClass());
                 if (Graph.class.equals(graphGeneratingMethod.getReturnType()))
-                {
-//                    G = (Graph)graphGeneratingMethod.invoke(null, methodArgs);
                     graphs.add((Graph)graphGeneratingMethod.invoke(null, methodArgs));
-                }
                 else
-                {
                     graphs = (List<Graph>)graphGeneratingMethod.invoke(null, methodArgs);
-//                    G = graphs.get(0);
-                }
             }
             catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException ex)
             {
@@ -757,7 +861,18 @@ public class DrawHyperGraph extends PApplet
             );
     }
 
+    public PVector relativeLine (List<PVector> vectors)
+    {
+        PVector acc = vectors.get(0).copy();
+        for (int i = 1; i < vectors.size(); acc.add(vectors.get(i)), i++)
+            line(acc, acc.copy().add(vectors.get(i)));
+        return acc;
+    }
 
+    public void line (PVector start, PVector end)
+    {
+        line(start.x, start.y, end.x, end.y);
+    }
 } // end class DrawHyperGraph
 
 
