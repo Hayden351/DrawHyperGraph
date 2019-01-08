@@ -201,6 +201,9 @@ public class DrawHyperGraph extends PApplet
     }
     public void handleInput()
     {
+        // TODO: currently zooming in/out is a hack to make vertices smaller/larger
+        //       at some point implement an actual zooming system
+        // https://www.gamedev.net/forums/topic/594055-zooming-onto-an-arbitrary-point/
         if (zoomingIn)
         {
             vertexRadius -= .125f;
@@ -220,19 +223,19 @@ public class DrawHyperGraph extends PApplet
                     vertexLocations.get(v).add(PVector.fromAngle(angleBetween(new PVector(width / 2, height / 2), vertexLocations.get(v))).normalize().mult(.25f));
         }
         
-        float movementSpeed = 6;
+        PVector movement = new PVector(0,0);
         if (movingUp)
-            for (Vertex v : vertexLocations.keySet())
-                vertexLocations.get(v).add(PVector.fromAngle(PI / 2).normalize().mult(verticalPanIncrement));
+            movement.add(PVector.fromAngle(PI / 2).normalize().mult(verticalPanIncrement));
         if (movingRight)
-            for (Vertex v : vertexLocations.keySet())
-                vertexLocations.get(v).add(PVector.fromAngle(PI).normalize().mult(this.horizantalPanIncrement));
+            movement.add(PVector.fromAngle(PI).normalize().mult(horizantalPanIncrement));
         if (movingDown)
-            for (Vertex v : vertexLocations.keySet())
-                vertexLocations.get(v).add(PVector.fromAngle(3 * PI / 2).normalize().mult(verticalPanIncrement));
+            movement.add(PVector.fromAngle(3 * PI / 2).normalize().mult(verticalPanIncrement));
         if (movingLeft)
-            for (Vertex v : vertexLocations.keySet())
-                vertexLocations.get(v).add(PVector.fromAngle(0).normalize().mult(movementSpeed));
+            movement.add(PVector.fromAngle(0).normalize().mult(horizantalPanIncrement));
+        
+        for (Vertex v : vertexLocations.keySet())
+            vertexLocations.get(v).add(movement);
+        this.topLeftCameraOffsetFromOrigin.sub(movement);
     }
 
     @Override
