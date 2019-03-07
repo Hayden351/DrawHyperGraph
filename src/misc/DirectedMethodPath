@@ -1,0 +1,436 @@
+package directedmethodpath;
+
+import com.github.javaparser.JavaParser;
+import com.github.javaparser.ParseResult;
+import com.github.javaparser.ParserConfiguration;
+import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.ImportDeclaration;
+import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.PackageDeclaration;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.FieldDeclaration;
+import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.expr.SimpleName;
+import com.github.javaparser.ast.expr.SuperExpr;
+import com.github.javaparser.resolution.UnsolvedSymbolException;
+import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
+import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
+import com.github.javaparser.symbolsolver.JavaSymbolSolver;
+import com.github.javaparser.symbolsolver.model.resolution.TypeSolver;
+import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
+import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
+import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Queue;
+import java.util.Set;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
+
+/**
+ * @author Hayden Fields
+ */
+public class DirectedMethodPath
+{
+    public static class ClsNode
+    {
+        Class cls;
+        List<ClsNode> children;
+        
+        public ClsNode(Class<?> cls)
+        {
+            this.cls = cls;
+            children = new ArrayList<>();
+        }
+        public ClsNode(Class<?> cls, List<ClsNode> clsNodes)
+        {
+            this.cls = cls;
+            children = new ArrayList<>(clsNodes);
+        }
+    }
+    
+    public static List<Node> findSubTreePartials(Node root, ClsNode subTree)
+    {
+        return root.stream().
+                    filter(x -> matches(x, subTree)).
+                    collect(Collectors.toList());
+    }
+    
+    public static boolean matches(Node root, ClsNode subTree)
+    {
+//        if (root == null)
+//            return false;
+        if (!subTree.cls.equals(root.getClass()))
+            return false;
+        if (!(subTree.children.size() <= root.getChildNodes().size()))
+            return false;
+        for (int i = 0; i < subTree.children.size(); i++)
+            if (!matches(root.getChildNodes().get(i), subTree.children.get(i)))
+                return false;
+        return true;
+    }
+    
+    public static final ClsNode OBJECT_METHOD_CALL = 
+        new ClsNode(MethodCallExpr.class, 
+            new ArrayList<>(Arrays.asList(new ClsNode(NameExpr.class), 
+                                          new ClsNode(SimpleName.class))));
+    public static final String END_LINE = "\r\n";
+    /**
+     * @param args the command line arguments
+     */
+    public static void main_ (String[] args) throws FileNotFoundException
+    {
+        JavaParser parser = new JavaParser
+        (new ParserConfiguration()
+            .setLanguageLevel(ParserConfiguration.LanguageLevel.POPULAR)
+            .setSymbolResolver(new JavaSymbolSolver(new CombinedTypeSolver()))
+        );
+        
+        
+        
+        String relativeFilePath = "src/main/java/directedmethodpath/test_classes/HasVariables.java";
+
+        CompilationUnit cu = parser.parse(new File(relativeFilePath)).getResult().get();   
+        System.out.println(cu);
+        ClassOrInterfaceDeclaration cls = cu.getClassByName("HasVariables").get();
+
+        List<FieldDeclaration> fields = cls.getFields();
+        
+        // VariableDeclarators are ((ClassOrInterfaceType, name), name)
+        List<VariableDeclarator> instanceVariables = getInstanceVariablesOf(cls);
+        
+        
+        
+        MethodDeclaration method = cls.getMethodsBySignature("a", "String", "String").get(0);
+
+        List<Parameter> parameters = method.getParameters();
+        
+        
+        
+        
+        
+        
+        
+        // find all calls made by this class
+        // find all calls made by instance variables
+        // find all calls made by local variables
+        
+//        List<>
+
+        // want to producea list of methods that 
+        
+        // we want a path of
+        class ResultNode
+        {
+            String classPath;
+            String methodName;
+            List<String> parameters;
+            
+            List<ResultNode> callees;
+        }
+        List<VariableDeclarator> localVariables = filter(method.stream().collect(Collectors.toList()), x -> x instanceof VariableDeclarator);
+        System.out.println(localVariables);
+        for (VariableDeclarator var : localVariables)
+        {
+            // throws exception because it doesn't know what a string is...
+            ResolvedValueDeclaration varWithType = var.resolve();
+            System.out.println(varWithType);
+            System.out.println(varWithType.getType());
+        }
+        System.out.println("");
+        for (MethodCallExpr methodCall : method.findAll(MethodCallExpr.class))
+        {
+            if (matches(methodCall, OBJECT_METHOD_CALL))
+            {
+                System.out.println("Object or static method call");
+                System.out.println(methodCall);
+                System.out.println("");
+                
+                
+
+//                VariableDeclarator var = findVariable(localVariables, methodCall.findFirst(NameExpr.class).get().getNameAsString());
+                
+                
+                
+                if (true) // variable in local scope?
+                {
+                    // use classorinterface type to find
+                }
+                else if (true) // is variable in global scope?
+                    ;
+                else if (true) // is variable in global scope of super class?
+                    ;
+                else if (true) // is actually classname for a static method?
+                    ;
+                else // is not defined anywhere?
+                    ;
+                
+            }
+            // is invoking the super class method
+            else if (methodCall.getChildNodes().stream().anyMatch(x -> x instanceof SuperExpr))
+            {
+            }
+            else
+            {
+                System.out.println("this object method call");
+                System.out.println(methodCall);
+                System.out.println("");
+            }
+            // TODO: what if it is a static method?
+//            methodCall.findAll(FieldAccessExpr.class).stream().map(x -> x.getClass()).forEach(System.out::println);
+            
+//            methodCall.getChildNodes().stream().forEach(x -> System.out.printf("%s %s\n", x.getClass(), x instanceof SimpleName ? String.format("%s", ((SimpleName)x).asString()):""));
+//            System.out.println("");
+            
+//            methodCall.findAll(NameExpr.class).forEach(System.out::println);
+                
+            // either is class method or superclass method
+            
+            
+            if (true) // method is instance variable variable
+                ;
+            // method is own class as else case
+        }
+        
+        
+        
+    }
+    
+    public static List<VariableDeclarator> getInstanceVariablesOf(CompilationUnit cu)
+    {
+        List<VariableDeclarator> result = new ArrayList<>();
+        // get only top level ClassOrInterfaceDeclarations
+        // avoid classes of classes that have static inner classes
+        // TODO: should we keep track of static inner classes? I feel like maybe we should
+        cu.getChildNodes().stream().
+            filter(x -> x instanceof ClassOrInterfaceDeclaration).
+            map(x -> getInstanceVariablesOf((ClassOrInterfaceDeclaration)x)).
+            forEach(result::addAll);
+        return null;
+    }
+    public static List<VariableDeclarator> getInstanceVariablesOf(ClassOrInterfaceDeclaration cls)
+    {
+        List<VariableDeclarator> result = new ArrayList<>();
+        for (FieldDeclaration field : cls.getFields())
+            result.addAll(field.findAll(VariableDeclarator.class));
+        return result;
+    }
+    public static <T> List<T> filter(List<Node> nodes, Predicate<Node> p)
+    {
+        List<T> elements = new ArrayList<>();
+        for (Node n : nodes)
+            if (p.test(n))
+                elements.add((T)n);
+        return elements;
+    }
+    private static VariableDeclarator findVariable (List<VariableDeclarator> variables, String nameAsString)
+    {
+        for (VariableDeclarator variable : variables)
+            if (nameAsString.equals(variable.getNameAsString()))
+                return variable;
+        return null;
+    }
+    public static class Payload
+    {
+        public String className;
+        public String methodName;
+        public List<String> methodParameterTypes;
+
+        @Override
+        public String toString ()
+        {
+            return "Payload{" + "className=" + className + ", methodName=" + methodName + ", methodParameterTypes=" + methodParameterTypes + '}';
+        }
+        
+        public Payload (String className, String methodName, List<String> methodParameterTypes)
+        {
+            this.className = className;
+            this.methodName = methodName;
+            this.methodParameterTypes = methodParameterTypes;
+        }
+
+        @Override
+        public int hashCode ()
+        {
+            int hash = 3;
+            hash = 31 * hash + Objects.hashCode(this.className);
+            hash = 31 * hash + Objects.hashCode(this.methodName);
+            hash = 31 * hash + Objects.hashCode(this.methodParameterTypes);
+            return hash;
+        }
+
+        @Override
+        public boolean equals (Object obj)
+        {
+            if (this == obj)
+                return true;
+            if (obj == null)
+                return false;
+            if (getClass() != obj.getClass())
+                return false;
+            final Payload other = (Payload) obj;
+            if (!Objects.equals(this.className, other.className))
+                return false;
+            if (!Objects.equals(this.methodName, other.methodName))
+                return false;
+            if (!Objects.equals(this.methodParameterTypes, other.methodParameterTypes))
+                return false;
+            return true;
+        }
+    }
+    
+    public static final String BASE_PATH = "C:/Users/DarkFight753/OneDrive/NBMisc";
+    public static final String PROJECT_NAME = "JavaParserVisited";
+    public static final List<String> PROJECTS = new ArrayList<>(Arrays.asList("JavaParserVisited"));
+    public static final String PROJECT_SRC_PATH = "src/main/java";
+    public static void main (String[] args) throws FileNotFoundException
+    {
+        CombinedTypeSolver solver = new CombinedTypeSolver();
+        solver.add(new ReflectionTypeSolver());
+        
+        JavaParser parser = new JavaParser
+        (
+            new ParserConfiguration().
+            setSymbolResolver(new JavaSymbolSolver(solver))
+        );
+        
+        Map<String, String> classNameToFilePath = new HashMap<>();
+        Set<String> contextPaths = new HashSet<>();
+        
+        Set<Payload> visited = new HashSet<>();
+        
+        String destinationClassFromUser = "Four";
+        String destinationMethodFromUser = "m";
+        List<String> destinationMethodParametersFromUser = new ArrayList<>();
+        Payload destinationPayload = new Payload
+        (
+            destinationClassFromUser,
+            destinationMethodFromUser,
+            destinationMethodParametersFromUser
+        );
+        
+        String classPathFromUser = "C:/Users/DarkFight753/OneDrive/NBMisc/JavaParserVisited/src/main/java/directedmethodpath/test_scenario/Zero.java";
+        
+        String classFromClassPath = "Zero";
+        String methodFromUser = "m";
+        List<String> parametersFromUser = new ArrayList<>();
+        Payload payloadFromUser = new Payload
+        (
+            classFromClassPath,
+            methodFromUser,
+            parametersFromUser
+        );
+        
+        classNameToFilePath.put("Zero", "C:/Users/DarkFight753/OneDrive/NBMisc/JavaParserVisited/src/main/java/directedmethodpath/test_scenario/Zero.java");
+        
+        Queue<Payload> queue = new ArrayDeque<>();
+        
+        queue.add(payloadFromUser);
+        visited.add(payloadFromUser);
+        
+        foundIt: while (!queue.isEmpty())
+        {
+            Payload payloadFromQueue = queue.poll();
+            
+            if (payloadFromQueue.equals(destinationPayload))
+                break foundIt;
+            
+            String filePath = classNameToFilePath.get(payloadFromQueue.className);
+            
+            CompilationUnit cuOfPayload = parser.parse(new File(filePath)).getResult().get();
+            
+            // if default the context is current directory or parent of current directory?
+            Optional<PackageDeclaration> pd = cuOfPayload.getPackageDeclaration();
+            String context = null;
+            if (pd.isPresent())
+                context = filePath.substring(0, filePath.length() - (pd.get().getNameAsString().length() + 1 + payloadFromQueue.className.length() + 4) - 1);
+            else
+                ;
+            System.out.println(context);
+            
+            // add context so that we can type all java source files within the
+            // contextPath
+            if (contextPaths.add(context))
+            {
+                solver.add(new JavaParserTypeSolver(new File(context)));
+            }
+            
+            for (MethodCallExpr methodCall : cuOfPayload.getClassByName(payloadFromQueue.className).get().getMethodsBySignature(payloadFromQueue.methodName, payloadFromQueue.methodParameterTypes.toArray(new String[0])).get(0).findAll(MethodCallExpr.class))
+            {
+                ResolvedMethodDeclaration resolvedMethod = null;
+                try
+                {
+                     resolvedMethod = methodCall.resolve();
+                }
+                catch (UnsolvedSymbolException use)
+                {
+                    use.printStackTrace();
+                    
+                    Optional<ImportDeclaration> id = cuOfPayload.getImports().stream().filter(x -> x.getNameAsString().equals(use.getName())).findFirst();
+                    
+                    if (id.isPresent())
+                        ;
+                    else   
+                    {
+                        // TODO: only parse if we have'
+//                        parser.parse(new File(classNameToFilePath.get(payloadFromQueue.className)).getParent() + use.getName() + ".java");
+                        
+                        resolvedMethod = methodCall.resolve();
+                    }
+                }
+                resolvedMethod.getClassName();
+                resolvedMethod.getName();
+                List<String> parameterTypes = new ArrayList<>();
+                for (int i = 0; i < resolvedMethod.getNumberOfParams(); i++)
+                {
+                    parameterTypes.add(resolvedMethod.getParam(i).getName());
+                }
+                System.out.println(new Payload(resolvedMethod.getClassName(),resolvedMethod.getName(), parameterTypes));
+                queue.add(new Payload(resolvedMethod.getClassName(),resolvedMethod.getName(), parameterTypes));
+                classNameToFilePath.put(resolvedMethod.getClassName(), findFilePath(cuOfPayload, resolvedMethod.getClassName(), classNameToFilePath.get(payloadFromQueue.className)));
+                
+            }
+        }
+    }
+    
+    public static String findFilePath(CompilationUnit cu, String typeToFind, String currentFilePath)
+    {
+        Optional<ImportDeclaration> id = cu.getImports().stream().
+                                            filter(x -> x.getNameAsString().equals(typeToFind)).findFirst();
+        if (id.isPresent()) // we found it
+        {
+            //TODO: try a project until it works
+            for (String project : PROJECTS)
+            {
+                // TODO: does this actually produce asdf/sdfg/asdf as exptected?
+                String filePath = 
+                    (BASE_PATH + "/") 
+                    + (project + "/")
+                    + (id.get().getNameAsString().replace(".", "/") + "/") 
+                    + typeToFind + ".java";
+                
+                if (new File(filePath).exists())
+                    return filePath;
+            }
+        }
+        else // must be in the same directory
+        {
+            return (new File(currentFilePath).getParent() + "/") + typeToFind + ".java";
+        }
+        return null;
+    }
+}
