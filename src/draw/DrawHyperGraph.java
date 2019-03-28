@@ -1,5 +1,12 @@
 package draw;
 
+//import com.fasterxml.jackson.databind.JsonNode;
+//import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import deprecated.DrawGraphAPI;
+import deprecated.Command;
+import deprecated.ApiState;
 import processing.core.*;
 
 import java.util.TreeMap;
@@ -14,10 +21,20 @@ import generate.GenerateGraph;
 import definition.GraphProperties;
 import java.awt.Color;
 import java.io.File;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintStream;
+import java.lang.management.ManagementFactory;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
+import java.net.MalformedURLException;
+import java.rmi.Naming;
+import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
+import java.util.ArrayDeque;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -28,10 +45,36 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.function.BiPredicate;
+import java.util.function.Function;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+
+// fromAST String C:\Users\DarkFight753\OneDrive\NBMisc\DirectedMethodPath\src\directedmethodpath\test_classes\InsideOnly.java
+// fromAST String C:\Users\DarkFight753\OneDrive\NBMisc\DirectedMethodPath\src\directedmethodpath\test_classes\TestClass.java
 public class DrawHyperGraph extends PApplet
 {
+    public static class GraphDrawingData
+    {
+        Graph G;
+        // colors for each specific Vertex and Edge in the graph G
+        public Map<Vertex, Color> vertexColors = new TreeMap<>();
+        public Map<Edge, Color> edgeColors = new TreeMap<>();
+        public TreeMap<Vertex, PVector> vertexLocations;
+        /*
+        in order to get color information i simply have to parse the json a 
+        second time while parsing it to get the graph information
+        */
+        
+    }
+    // TODO: figure out how to take multiple (graph and graph draw information)
+    //       instead of having only one (Although interestingly enough having 
+    //       only 1 for colors would work since unique edges)
+    public static Map<Edge, Color> edgeColors = new TreeMap<>();
+    public static Map<Vertex, Color> vertexColors = new TreeMap<>();
+    
     // track the locations of vertices in the drawing
     public static TreeMap<Vertex, PVector> vertexLocations;
     // track which vertex is currently being moved by the mouse
@@ -39,6 +82,15 @@ public class DrawHyperGraph extends PApplet
     public static PVector heldOffset;
     public static List<Graph> graphs = new ArrayList<>();
     public static int currentGraph = 0;
+    public static PrintStream out = System.out;
+    
+    
+    public static class ToBoolean implements Converter
+    { @Override public Object convert (List<String> args) { return Boolean.valueOf(args.get(0)); } }
+    public static class ConvertToColor implements Converter
+    { @Override public Object convert (List<String> args) { return new Color(Integer.parseInt(args.get(0)), Integer.parseInt(args.get(1)), Integer.parseInt(args.get(2))); } }
+    
+    
     // TODO: do we need G at all?
     /*
     can refer to G or graphs.get(currentGraph)
@@ -64,21 +116,50 @@ public class DrawHyperGraph extends PApplet
     @CommandLineConfigurable(description="The edge offset factor when edges are overlapped.")
     public static float edgeOffset = (1 + sqrt(5)) / 2;
     
+    // TODO: add an example json into description
+    @CommandLineConfigurable(description="Additionally read json information from given graph.",neededParameters=0)
+    boolean readColors;
+    
+    public boolean movementDisabled = false;
+    
+    public static boolean undirected = false;
+    
     public PVector topLeftCameraOffsetFromOrigin = new PVector(0, 0);
     
-    public float horizantalPanIncrement = 6;
-    public float verticalPanIncrement = 6;
+    @CommandLineConfigurable(description="How quickly the camera will move around when the arrow keys are pressed.")
+    public static float panIncrement = 6;
+    
+    @CommandLineConfigurable(description="Horizontal camera speed.")
+    public static float horizantalPanIncrement = 6;
+    
+    @CommandLineConfigurable(description="Vertical camera speed.")
+    public static float verticalPanIncrement = 6;
     
     public static boolean noOutOfBounds = false;
     
-    // TODO: maybe add functionality to command line configurable
     public static boolean fullscreen = false;
     
-    private static Color baseVertexColor;
+    @CommandLineConfigurable(description="The default color for a vertex.",function=ConvertToColor.class,neededParameters=3)
+    private static Color baseVertexColor = new Color(0,0,0);
+    
+    @CommandLineConfigurable(description="The default color for a vertex label.",function=ConvertToColor.class,neededParameters=3)
+    private static Color baseVertexLabelColor = new Color(0,0,0);
+    
+    @CommandLineConfigurable(description="The default color for a edges.",function=ConvertToColor.class,neededParameters=3)
+    private static Color baseEdgeColor = new Color(0,0,0);
+    
+    @CommandLineConfigurable(description="The default color for a edge labels.",function=ConvertToColor.class,neededParameters=3)
+    private static Color baseEdgeLabelColor = new Color(0,0,0);
+    
+    @CommandLineConfigurable(description="Vertex and edge color information from a file.")
+    public static String readColorInformationFromFile = null;
+    
+    @CommandLineConfigurable(description="Vertex and edge color information from the input.",neededParameters = 0)
+    public static boolean readColorInformationFromInput;
     
     public static boolean tree = false;
     
-    public static float PHI = (1 + sqrt(5)) / 2;
+    public static final float PHI = (1 + sqrt(5)) / 2;
 
 // TODO: change font maybe
     PFont font;
@@ -88,13 +169,15 @@ public class DrawHyperGraph extends PApplet
         size(displayWidth, displayHeight);
     }   
 
+    public DrawGraphAPI apiInput;
+    
     @Override
     public void setup ()
     {
         surface.setResizable(true);
+        out.println(ManagementFactory.getRuntimeMXBean().getName());
         if (fullscreen)
         {
-//            fullScreen();
             surface.setSize(displayWidth, displayHeight);
             width = displayWidth;
             height = displayHeight;
@@ -102,11 +185,10 @@ public class DrawHyperGraph extends PApplet
         else
             surface.setSize(initialWidth, initialHeight);
         
-        
         // set each edge to not be directed towards any of its vertices
         // TODO: we shouldn't change the graph, we just want to change how we draw the graph
-        if (!directed)
-            graphs.forEach(graph -> graph.edges().forEach(edge -> edge.vertices.replaceAll((v, b) -> false)));
+        if (undirected)
+            graphs.forEach(graph -> graph.edges().forEach(edge -> edge.orientations.replaceAll((v, b) -> false)));
         
         
         // initially no vertex is being manipulated
@@ -122,11 +204,102 @@ public class DrawHyperGraph extends PApplet
         //
         if (tree)
             for (Graph G : graphs)
-                placeVerticesTree(G);
+//                placeVerticesTree(G);
+                spreadOutVertices(G);
         else
             for (Graph G : graphs)
                 placeVerticesRandom(G);
+        
+        // TODO:
+        if (readColorInformationFromFile != null)
+        {
+//            try
+//            {
+//                JsonNode node = new ObjectMapper().readTree(readColorInformationFromFile);
+//            }
+//            catch (IOException ex)
+//            {
+//                System.out.println("Couldn't add color information");
+//            }
+        }
+        
+        System.out.println(graphs.get(currentGraph));
     }
+    
+    public int printLocationOccassionally = 0;
+    @Override
+    public void draw ()
+    {
+        // logs the current location
+        if (printLocationOccassionally < 300)
+            printLocationOccassionally++;
+        else
+        {
+            out.printf("[ %s %s ]\n", this.topLeftCameraOffsetFromOrigin.x, this.topLeftCameraOffsetFromOrigin.y);
+            printLocationOccassionally = 0;
+        }
+        
+        background(255);
+
+        handleInput();
+        
+        // draw vertices
+        for (Vertex v : graphs.get(currentGraph).vertices())
+        {
+            PVector vLoc = vertexLocations.get(v);
+
+            vertexSettings(v);
+            ellipse(vLoc.x, vLoc.y, 2 * vertexRadius, 2 * vertexRadius);
+
+            vertexTextSettings();
+            text(v.label, vLoc.x, vLoc.y);
+        }
+
+        // find all overlapping edges
+        // first separate the graph into distinct classes
+        // where each class is of edges that have the same set of vertices they connect
+        ArrayList<ArrayList<Edge>> equivalenceClasses = new ArrayList<>();
+        
+        // membership is transitive so only have to test the first element
+        BiPredicate<Edge, ArrayList<Edge>> isIn = (e, edgeClass) -> 
+                edgeClass.get(0).sameConnections(e);
+        
+        graphs.get(currentGraph).edges().forEach // matches an edge into a edge class
+        ( edge ->   equivalenceClasses.stream().
+                    filter(edgeClass -> isIn.test(edge, edgeClass)).
+                    findFirst().orElseGet(() -> 
+                    {   // create new edge class since one doesn't exist
+                        ArrayList<Edge> newEdgeClass = new ArrayList<>();
+                        equivalenceClasses.add(newEdgeClass);
+                        return newEdgeClass;
+                    }).
+                    add(edge)
+        );
+        
+        // draw each edge such that they are offset from the previous edge
+        for (ArrayList<Edge> edgeClass : equivalenceClasses)
+        {
+            // draw each edge offset from the other edges in the class
+            /* TODO:
+            i = 0 the 0th edge is very close to e 1th edge, however
+            i = 1 there is no edge that is at the center of the vertices
+            */
+            int i = edgeClass.size() <= 3 ? 0 : 1; 
+            for (Edge e : edgeClass)
+                drawEdge(e, i++);
+        }
+
+        // move held vertex to the mouse
+        if (held != null)
+            vertexLocations.put(held, new PVector(mouseX, mouseY).add(heldOffset));
+        if (noOutOfBounds)
+            for (Vertex v : graphs.get(currentGraph).vertices) // TODO: there is a much nicer way of doing this using map methods
+                vertexLocations.put(v, new PVector(
+                    constrain(vertexLocations.get(v).x, vertexRadius + 1, width - vertexRadius - 1),
+                    constrain(vertexLocations.get(v).y, vertexRadius + 1, height - vertexRadius - 1)
+                ));
+    }
+    
     
     // i don't know maybe this will help
     // https://www.gamedev.net/forums/topic/594055-zooming-onto-an-arbitrary-point/
@@ -238,82 +411,19 @@ public class DrawHyperGraph extends PApplet
         this.topLeftCameraOffsetFromOrigin.sub(movement);
     }
 
-    @Override
-    public void draw ()
-    {
-        System.out.println(this.topLeftCameraOffsetFromOrigin);
-        background(255);
-
-        handleInput();
-        
-        // draw vertices
-        for (Vertex v : graphs.get(currentGraph).vertices())
-        {
-            PVector vLoc = vertexLocations.get(v);
-
-            vertexSettings();
-            ellipse(vLoc.x, vLoc.y, 2 * vertexRadius, 2 * vertexRadius);
-
-            vertexTextSettings();
-            text(v.label, vLoc.x, vLoc.y);
-        }
-
-        // find all overlapping edges
-        // first separate the graph into distinct classes
-        // where each class is of edges that have the same set of vertices they connect
-        ArrayList<ArrayList<Edge>> equivalenceClasses = new ArrayList<>();
-        
-        // membership is transitive so only have to test the first element
-        BiPredicate<Edge, ArrayList<Edge>> isIn = (e, edgeClass) -> 
-                edgeClass.get(0).sameConnections(e);
-        
-        graphs.get(currentGraph).edges().forEach // matches an edge into a edge class
-        ( edge ->   equivalenceClasses.stream().
-                    filter(edgeClass -> isIn.test(edge, edgeClass)).
-                    findFirst().orElseGet(() -> 
-                    {   // create new edge class since one doesn't exist
-                        ArrayList<Edge> newEdgeClass = new ArrayList<>();
-                        equivalenceClasses.add(newEdgeClass);
-                        return newEdgeClass;
-                    }).
-                    add(edge)
-        );
-        
-        // draw each edge such that they are offset from the previous edge
-        for (ArrayList<Edge> edgeClass : equivalenceClasses)
-        {
-            // draw each edge offset from the other edges in the class
-            /* TODO:
-            i = 0 the 0th edge is very close to e 1th edge, however
-            i = 1 there is no edge that is at the center of the vertices
-            */
-            int i = edgeClass.size() <= 3 ? 0 : 1; 
-            for (Edge e : edgeClass)
-                drawEdge(e, i++);
-        }
-
-        // move held vertex to the mouse
-        if (held != null)
-            vertexLocations.put(held, new PVector(mouseX, mouseY).add(heldOffset));
-        if (noOutOfBounds)
-            for (Vertex v : graphs.get(currentGraph).vertices) // TODO: there is a much nicer way of doing this using map methods
-                vertexLocations.put(v, new PVector(
-                    constrain(vertexLocations.get(v).x, vertexRadius + 1, width - vertexRadius - 1),
-                    constrain(vertexLocations.get(v).y, vertexRadius + 1, height - vertexRadius - 1)
-                ));
-    }
-
     public static float TAU = PI * 2;
     public void drawEdge (Edge e, int i)
     {
         // the center of a edge is the average of all the positions of all the
         // positions of the vertices that are connected by this edge
         PVector edgeCenter;
+        
+        // TODO: self loop is too blocky, replace with absolute instead of relative
         if (e.vertices().size() == 1) // is self loop
         {
             PVector vLoc = vertexLocations.get(e.vertices().iterator().next());
             
-            boolean isDirected = e.vertices.values().stream().anyMatch(x -> x);
+            boolean isDirected = e.orientations.values().stream().anyMatch(x -> x);
             // TODO: wat do if self loop. right now is just a line above the vertex
 //            float theta = (TAU * 8) / 16 + (TAU / 4 - asin(1/sqrt(5)));
             float theta = (12 * TAU - 16 * asin(1/sqrt(5))) / 16;
@@ -359,7 +469,7 @@ public class DrawHyperGraph extends PApplet
                             end.y,
                             PI / 2,
                             headingWidth,
-                            headingHeight);
+                            headingHeight, e);
             }
             return;
         }
@@ -395,30 +505,31 @@ public class DrawHyperGraph extends PApplet
                           normalize().
                           mult((vertexRadius + 1) + (e.orientedTowards(v)?headingHeight:0));
 
-            edgeSettings(); // set settings for drawing an edge line
+            edgeSettings(e); // set settings for drawing an edge line
             line(edgeCenter.x, edgeCenter.y, vLoc.x + end.x, vLoc.y + end.y);
 
             // draw heading if oriented towards
             if (e.orientedTowards(v))
-                drawHeading(vLoc.copy().add(end), atan2(-end.y, -end.x), headingWidth, headingHeight);
+                drawHeading(vLoc.copy().add(end), atan2(-end.y, -end.x), headingWidth, headingHeight, e);
 
+            // draw text after line so that text is visible
             edgeTextSettings(); // set setting for drawing the label of an edge
             text(e.label, edgeCenter.x, edgeCenter.y);
         }
     } // end drawEdge ()
 
-    public void drawHeading(float startHeadingX, float startHeadingY, float angle, float headingWidth, float headingHeight)
+    public void drawHeading(float startHeadingX, float startHeadingY, float angle, float headingWidth, float headingHeight, Edge e)
     {
-        drawHeading(new PVector(startHeadingX, startHeadingY), angle, headingWidth, headingHeight);
+        drawHeading(new PVector(startHeadingX, startHeadingY), angle, headingWidth, headingHeight, e);
     }
     
-    public void drawHeading(PVector startHeading, float angle, float headingWidth, float headingHeight)
+    public void drawHeading(PVector startHeading, float angle, float headingWidth, float headingHeight, Edge e)
     {
         PVector leftPoint = startHeading.copy().add(PVector.fromAngle(angle + PI / 2).mult(headingWidth / 2));
         PVector rightPoint = startHeading.copy().add(PVector.fromAngle(angle - PI / 2).mult(headingWidth / 2));
         PVector forwardPoint = startHeading.copy().add(PVector.fromAngle(angle).mult(headingHeight));
 
-        headingSettings();
+        headingSettings(e);
 
         line(startHeading.x, startHeading.y, leftPoint.x, leftPoint.y);
         line(startHeading.x, startHeading.y, rightPoint.x, rightPoint.y);
@@ -486,35 +597,40 @@ public class DrawHyperGraph extends PApplet
         held = null;
     }
 
-    public void headingSettings ()
+    public void headingSettings (Edge e)
     {
         noFill();
-        stroke(0);
+        Color c = edgeColors.getOrDefault(e, baseEdgeColor);
+        stroke(c.getRed(), c.getGreen(), c.getBlue());
     }
 
-    public void vertexSettings ()
+    public void vertexSettings (Vertex v)
     {
+        Color c = vertexColors.getOrDefault(v, baseVertexColor);
         noFill();
-        stroke(baseVertexColor.getRed(), baseVertexColor.getGreen(),
-            baseVertexColor.getBlue());
+        stroke(c.getRed(), c.getGreen(), c.getBlue());
     }
 
     public void vertexTextSettings ()
     {
-        fill(0, 0, 255);
+        fill(baseVertexLabelColor.getRed(), baseVertexLabelColor.getGreen(),
+            baseVertexLabelColor.getBlue());
         textSize(10);
         textAlign(CENTER);
     }
 
-    public void edgeSettings ()
+    public void edgeSettings (Edge e)
     {
         noFill();
-        stroke(0);
+        Color c = edgeColors.getOrDefault(e, baseEdgeColor);
+        stroke(c.getRed(), c.getGreen(), c.getBlue());
+        
     }
 
     public void edgeTextSettings ()
     {
-        fill(255, 0, 0);
+        fill(baseEdgeLabelColor.getRed(), baseEdgeLabelColor.getGreen(),
+            baseEdgeLabelColor.getBlue());
         textSize(14);
         textAlign(CENTER);
     }
@@ -558,9 +674,9 @@ public class DrawHyperGraph extends PApplet
     }
     
     // TODO: move and maybe 
-    public static boolean directed = true;
     public static void main (String[] args)
     {
+        System.out.println(Arrays.toString(args));
         baseVertexColor = new Color(0,0,0);
         String[] appletArgs = new String[]{"draw.DrawHyperGraph"};
         
@@ -577,7 +693,7 @@ public class DrawHyperGraph extends PApplet
                 {
                     case "-fullscreen":
                     {
-                        appletArgs= new String[]{"--present", "--window-color=#666666", "--hide-stop", "draw.DrawHyperGraph"};
+                        appletArgs = new String[]{"--present", "--window-color=#666666", "--hide-stop", "draw.DrawHyperGraph"};
                         fullscreen = true;
                     } break;
                     case "-vertexColor":
@@ -600,7 +716,7 @@ public class DrawHyperGraph extends PApplet
                     } break;
                     case "-undirected":
                     {
-                        directed = false;
+                        undirected = false;
                     } break;
                     case "-tree":
                     {
@@ -614,20 +730,39 @@ public class DrawHyperGraph extends PApplet
                         try
                         {
                             
-                        for (Field f : DrawHyperGraph.class.getDeclaredFields())
-                            if (flag.equals(f.getName()) && null != f.getDeclaredAnnotation(CommandLineConfigurable.class))
+                            for (Field f : DrawHyperGraph.class.getDeclaredFields())
                             {
-                                f.set(null, convertArg(f.getType(), args[++i]));
-                                flagTripped = true;
-                                break;
+                                CommandLineConfigurable var = f.getDeclaredAnnotation(CommandLineConfigurable.class);
+                                if (var != null && flag.equals(f.getName()))
+                                {
+                                    
+                                    List<String> parameterArgs = new ArrayList<>();
+                                    for (int argCount = 0; argCount < var.neededParameters(); argCount++)
+                                    {
+                                        i++;
+                                        // TODO: i holds the posiiton of the previously used
+                                        // probably want to change it so it holds the next usable
+                                        String parameterArg = args[i];
+                                        Pattern p = Pattern.compile("^--?");
+                                        if (p.matcher(parameterArg).matches())
+                                            ; // then error
+                                        
+                                        parameterArgs.add(parameterArg);
+                                    }
+                                    // TODO: test this i think it works now
+                                    f.set(null, ((Converter)var.function().newInstance()).convert(parameterArgs));
+                                    flagTripped = true;
+                                    break;
+                                }
                             }
                         }
-                        catch (IllegalArgumentException | IllegalAccessException ex) 
+                        catch (IllegalArgumentException | IllegalAccessException | InstantiationException ex) 
                         {
                             ex.printStackTrace();
                             // TODO: wat do
                             return;
                         }
+                        
                         // TODO: make error handling not garbage
                         if (!flagTripped)
                         {
@@ -678,11 +813,65 @@ public class DrawHyperGraph extends PApplet
                 // path a different set of graph generating algorithms
                 // TODO: implement a way of invoking multiple menthods
                 Method graphGeneratingMethod = GenerateGraph.class.getMethod(methodName, methodArgTypes);
-               
+                
+                
+//               
                 if (Graph.class.equals(graphGeneratingMethod.getReturnType()))
                     graphs.add((Graph)graphGeneratingMethod.invoke(null, methodArgs));
                 else
                     graphs = (List<Graph>)graphGeneratingMethod.invoke(null, methodArgs);
+                
+                
+                if (readColorInformationFromInput)
+                {
+                    try
+                    {
+                        JsonNode node = new ObjectMapper().readTree(new File((String)methodArgs[0]));
+                        System.out.println("");
+                        System.out.println("");
+                        System.out.println(node);
+                        
+                        System.out.println("");
+                        System.out.println("");
+                        
+                        node.get("vertices").elements().forEachRemaining(vertext ->
+                        {
+                            System.out.println(vertext);
+                            
+                            JsonNode jsonColor = vertext.get("color");
+                            
+                            if (jsonColor != null)
+                            {
+                                Color color = new Color(jsonColor.get("red").asInt(), jsonColor.get("green").asInt(), jsonColor.get("blue").asInt());
+                            
+                            
+                                // TODO: this 
+                                vertexColors.put(graphs.get(0).findVertexById(vertext.get("uniqueId").asInt()), color);
+                            }
+                        });
+                        
+                        node.get("edges").elements().forEachRemaining(edge ->
+                        {
+                            System.out.println(edge);
+                            
+                            JsonNode jsonColor = edge.get("color");
+                            
+                            if (jsonColor != null)
+                            {
+                                Color color = new Color(jsonColor.get("red").asInt(), jsonColor.get("green").asInt(), jsonColor.get("blue").asInt());
+                            
+                            
+                                // TODO: this 
+                                edgeColors.put(graphs.get(0).findEdgeById(edge.get("uniqueId").asInt()), color);
+                            }
+                        });
+                        
+                    }
+                    catch (IOException ex)
+                    {
+                        System.out.println("Couldn't add color information");
+                    }
+                }
             }
             catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException ex)
             {
@@ -714,11 +903,11 @@ public class DrawHyperGraph extends PApplet
             return;
         }
 
+        // we just call a different main method from this main method
         PApplet.main(appletArgs);
        
 //        PApplet.main(new String[] { "SaveMenu" });
     } // end main ()
-    
     
     private static void printUsableMethods ()
     {
@@ -748,120 +937,165 @@ public class DrawHyperGraph extends PApplet
                 System.out.printf("-%s : %s\n", f.getName(), config.description());
         }
     }
+    
+    public void spreadOutVertices (Graph G)
+    {
+        Set<Vertex> verticesWithNoParents = new HashSet<>(G.vertices);
+        for (Iterator<Vertex> it = verticesWithNoParents.iterator(); it.hasNext();)
+        {
+            Vertex v = it.next();
+            for (Edge e : G.edges)
+                if (e.orientedTowards(v))
+                {
+                    it.remove();
+                    break;
+                }
+        }
+        
+        int depth = 0;
+        
+        Set<Vertex> visited = new HashSet<>();
+        Set<Vertex> currentLayer = new HashSet<>();
+        
+        currentLayer.addAll(verticesWithNoParents);
+        visited.addAll(currentLayer);
+        
+        while (true)
+        {
+            int numberInlayer = currentLayer.size();
+            int currentInLayer = 0;
+            Iterator<Vertex> it = currentLayer.iterator();
+            while (it.hasNext())
+            {
+                Vertex v = it.next();
+                vertexLocations.put(v, new PVector(width / 2, height / 2).add(PVector.fromAngle(2 * currentInLayer * PI / numberInlayer).mult(depth * vertexRadius * 3)));
+                currentInLayer++;
+            }
+            
+            if (visited.equals(G.vertices))
+                break;
+            
+            Set<Vertex> newLayer = new HashSet<>();
+            for (Vertex v : currentLayer)
+                for (Vertex u : GraphProperties.getNeighbors(G, v))
+                if (visited.add(u))
+                    newLayer.add(u);
+            currentLayer = newLayer;
+            depth++;
+        }
+        
+        for (Vertex v : G.vertices)
+            if (!vertexLocations.containsKey(v))
+                vertexLocations.put(v, new PVector(0, 0));
+    }
 
     private void placeVerticesTree (Graph G)
     {
         Set<Vertex> verticesWithNoParents = new HashSet<>(G.vertices);
-            for (Iterator<Vertex> it = verticesWithNoParents.iterator(); it.hasNext();)
-            {
-                Vertex v = it.next();
-                for (Edge e : G.edges)
-                    if (e.orientedTowards(v))
-                    {
-                        it.remove();
-                        break;
-                    }
-            }
+        for (Iterator<Vertex> it = verticesWithNoParents.iterator(); it.hasNext();)
+        {
+            Vertex v = it.next();
+            for (Edge e : G.edges)
+                if (e.orientedTowards(v))
+                {
+                    it.remove();
+                    break;
+                }
+        }
 //            Vertex src = verticesWithNoParents.iterator().next(); // src is root
             
-            // initialize visited map
-            Map<Vertex, Boolean> visited = new HashMap<>(); // TODO: can replace with vertexLocations
-            for (Vertex v : G.vertices)
-                visited.put(v, Boolean.FALSE);
-            
-            Queue<Vertex> vertexQueue = new LinkedList<>();
-            
-            for (Vertex src : verticesWithNoParents)
+        // initialize visited map
+        Map<Vertex, Boolean> visited = new HashMap<>(); // TODO: can replace with vertexLocations
+        for (Vertex v : G.vertices)
+            visited.put(v, Boolean.FALSE);
+
+        Queue<Vertex> vertexQueue = new LinkedList<>();
+
+        for (Vertex src : verticesWithNoParents)
+        {
+            vertexQueue.add(src);
+            visited.put(src, Boolean.TRUE);
+            vertexLocations.put(src, new PVector(vertexRadius *2, vertexRadius * 2));
+        }
+
+        while (!vertexQueue.isEmpty())
+        {
+            Vertex v = vertexQueue.remove();
+            System.out.printf("%s :", v);
+
+            Collection<Vertex> neighbors = GraphProperties.getNeighbors(G, v);
+
+            int j = 0;
+            for (Vertex u : neighbors)
             {
-                vertexQueue.add(src);
-                visited.put(src, Boolean.TRUE);
-                vertexLocations.put(src, new PVector(vertexRadius *2, vertexRadius * 2));
-            }
-            
-            while (!vertexQueue.isEmpty())
-            {
-                Vertex v = vertexQueue.remove();
-                System.out.printf("%s :", v);
-                
-                Collection<Vertex> neighbors = GraphProperties.getNeighbors(G, v);
-                
-                int j = 0;
-                for (Vertex u : neighbors)
+                System.out.printf(" %s", u);
+
+                if (!visited.get(u))
                 {
-                    System.out.printf(" %s", u);
-                    
-                    if (!visited.get(u))
-                    {
-                        // want to head 4 vertex radii away
-                        // there are n vertcies
-                        // r = (4v / n) distance each iteration
-                        // average theta = 0; // use average theta for direction afterwards
-                        // for v : V(G)
-                        //     theta = angle from vector from vertex to initial posiiton
-                        //     posiiton += (r * cos(theta), r * sin(theta))
-                        // if overlapped travel vertex radius distance in average theta
-                        // if hit edge then bounce
-                        vertexQueue.add(u);
-                        visited.put(u, Boolean.TRUE); // after vertex is visited we place it on the canvas
-                        // TODO: check location befoer putting it if overlap 
-                        //       find average angle away then move/bounce
-                        float rad = 2 * vertexRadius / vertexLocations.keySet().size();
-                        
-                        // initial position is the parent
-                        // for each vertex r that already has a location
-                        // move it a little away from r
-                        float angleFromParent = 3 * PI / 4 * j++ / neighbors.size();
-                        PVector placementLocation = vertexLocations.get(v).copy().
-                                                        add(PVector.fromAngle(angleFromParent).
-                                                        mult(2 * vertexRadius));
-                        
+                    // want to head 4 vertex radii away
+                    // there are n vertcies
+                    // r = (4v / n) distance each iteration
+                    // average theta = 0; // use average theta for direction afterwards
+                    // for v : V(G)
+                    //     theta = angle from vector from vertex to initial posiiton
+                    //     posiiton += (r * cos(theta), r * sin(theta))
+                    // if overlapped travel vertex radius distance in average theta
+                    // if hit edge then bounce
+                    vertexQueue.add(u);
+                    visited.put(u, Boolean.TRUE); // after vertex is visited we place it on the canvas
+                    // TODO: check location befoer putting it if overlap 
+                    //       find average angle away then move/bounce
+                    float rad = 2 * vertexRadius / vertexLocations.keySet().size();
+
+                    // initial position is the parent
+                    // for each vertex r that already has a location
+                    // move it a little away from r
+                    float angleFromParent = 3 * PI / 4 * j++ / neighbors.size();
+                    PVector placementLocation = vertexLocations.get(v).copy().
+                                                    add(PVector.fromAngle(angleFromParent).
+                                                    mult(2 * vertexRadius));
+
 //                        for (Vertex r : vertexLocations.keySet())
 //                        {
 //                            float angleBetween = angleBetween(vertexLocations.get(r), placementLocation);
 ////                            System.out.println(angleBetween);
 //                            placementLocation.add(PVector.fromAngle(angleBetween).normalize().mult(rad));
 //                        }
-                        
-                        // TODO: this logic is kind of wonky
-                        int giveUp = width * height;
-                        while (Utils.isLocationAwayFrom(placementLocation, vertexLocations, vertexRadius * 3))
-                        {
-                            PVector newLocation  = placementLocation.copy().add(new PVector(5 * cos(angleFromParent), 5 * sin(angleFromParent)));
-  
-                            // move or change direction
-                            if (!(0 <= newLocation.x && newLocation.x <= width && rad <= newLocation.y && newLocation.y <= height))
-                              angleFromParent += (2 * PI / PHI);
-                            else
-                              placementLocation = newLocation;
-                            if (giveUp-- <= 0)
-                                break;
-                        }
-                        vertexLocations.put(u, placementLocation);
-                        
+
+                    // TODO: this logic is kind of wonky
+                    int giveUp = width * height;
+                    while (Utils.isLocationAwayFrom(placementLocation, vertexLocations, vertexRadius * 3))
+                    {
+                        PVector newLocation  = placementLocation.copy().add(new PVector(5 * cos(angleFromParent), 5 * sin(angleFromParent)));
+
+                        // move or change direction
+//                        if (!(0 <= newLocation.x && newLocation.x <= width && rad <= newLocation.y && newLocation.y <= height))
+//                          angleFromParent += (2 * PI / PHI);
+//                        else
+                          placementLocation = newLocation;
+                        if (giveUp-- <= 0)
+                            break;
                     }
+                    vertexLocations.put(u, placementLocation);
+
                 }
-                System.out.println("");
             }
-            
-            // move back into bounds
-            for (Vertex v : G.vertices)
-                vertexLocations.put(v, new PVector(
-                            constrain(vertexLocations.get(v).x, vertexRadius + 1, width - vertexRadius - 1),
-                            constrain(vertexLocations.get(v).y, vertexRadius + 1, height - vertexRadius - 1)));
+            System.out.println("");
+        }
+
+        // move back into bounds
+//        for (Vertex v : G.vertices)
+//            vertexLocations.put(v, new PVector(
+//                        constrain(vertexLocations.get(v).x, vertexRadius + 1, width - vertexRadius - 1),
+//                        constrain(vertexLocations.get(v).y, vertexRadius + 1, height - vertexRadius - 1)));
     }
 
     private void placeVerticesRandom (Graph G)
     {
         for (Vertex v : G.vertices())
             vertexLocations.put
-            (
-                v, // ->
-                new PVector
-                (
-                    random(vertexRadius + 1, width - vertexRadius - 1),
-                    random(vertexRadius + 1, height - vertexRadius - 1)
-                )
-            );
+            (v, new PVector(random(vertexRadius + 1, width - vertexRadius - 1),
+                            random(vertexRadius + 1, height - vertexRadius - 1)));
     }
 
     public PVector relativeLine (List<PVector> vectors)
@@ -880,3 +1114,5 @@ public class DrawHyperGraph extends PApplet
 
 
 // -vertexColor 255 40 60 -fullscreen -vertexRadius 60 -size 400 200 randomGraph int 8 int 4
+// -baseVertexColor 255 0 0 -baseEdgeColor 0 255 0 -panIncrement 20 -initialWidth 1000 -vertexRadius 20 undirectedUnlabeledGraphFrom String "0 1 1 0 0~0 0 0 1 1~0 0 0 0 0~0 0 0 0 0~0 0 0 0 0"
+// java -jar dist\DrawHyperGraph.jar -readColorInformationFromInput -baseVertexColor 0 0 255 -baseVertexLabelColor 0 0 255 -baseEdgeColor 0 0 255 -baseEdgeLabelColor 0 255 0 graphFromJsonFile String src/draw/json

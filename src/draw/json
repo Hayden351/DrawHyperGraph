@@ -1,0 +1,119 @@
+{
+  "vertices" : [ {
+    "uniqueId" : 0,
+    "label" : ""
+  }, {
+    "uniqueId" : 1,
+    "label" : "A",
+    "color" :
+    {
+        "red" : 255,
+        "blue" : 0,
+        "green" : 0
+    }
+  }, {
+    "uniqueId" : 2,
+    "label" : "t"
+  }, {
+    "uniqueId" : 3,
+    "label" : "to"
+  }, {
+    "uniqueId" : 4,
+    "label" : "te"
+  }, {
+    "uniqueId" : 5,
+    "label" : "tea"
+  }, {
+    "uniqueId" : 6,
+    "label" : "ted"
+  }, {
+    "uniqueId" : 7,
+    "label" : "ten"
+  }, {
+    "uniqueId" : 8,
+    "label" : "i"
+  }, {
+    "uniqueId" : 9,
+    "label" : "in"
+  }, {
+    "uniqueId" : 10,
+    "label" : "inn"
+  } ],
+  "edges" : [ {
+    "uniqueId" : 0,
+    "label" : "A",
+    "orientations" : {
+      "0" : false,
+      "1" : true
+    }
+  }, {
+    "uniqueId" : 1,
+    "label" : "t",
+    "orientations" : {
+      "0" : false,
+      "2" : true
+    }
+  }, {
+    "uniqueId" : 2,
+    "label" : "o",
+    "orientations" : {
+      "2" : false,
+      "3" : true
+    }
+  }, {
+    "uniqueId" : 3,
+    "label" : "e",
+    "orientations" : {
+      "2" : false,
+      "4" : true
+    }
+  }, {
+    "uniqueId" : 4,
+    "label" : "a",
+    "orientations" : {
+      "4" : false,
+      "5" : true
+    }
+  }, {
+    "uniqueId" : 5,
+    "label" : "d",
+    "orientations" : {
+      "4" : false,
+      "6" : true
+    }
+  }, {
+    "uniqueId" : 6,
+    "label" : "n",
+    "orientations" : {
+      "4" : false,
+      "7" : true
+    }
+  }, {
+    "uniqueId" : 7,
+    "label" : "i",
+    "orientations" : {
+      "0" : false,
+      "8" : true
+    }
+  }, {
+    "uniqueId" : 8,
+    "label" : "n",
+    "orientations" : {
+      "8" : false,
+      "9" : true
+    }
+  }, {
+    "uniqueId" : 9,
+    "label" : "n",
+    "orientations" : {
+      "9" : false,
+      "10" : true
+    },
+    "color" :
+    {
+        "red" : 255,
+        "blue" : 0,
+        "green" : 0
+    }
+  } ]
+}
