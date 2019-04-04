@@ -89,7 +89,8 @@ public class DrawHyperGraph extends PApplet
     { @Override public Object convert (List<String> args) { return Boolean.valueOf(args.get(0)); } }
     public static class ConvertToColor implements Converter
     { @Override public Object convert (List<String> args) { return new Color(Integer.parseInt(args.get(0)), Integer.parseInt(args.get(1)), Integer.parseInt(args.get(2))); } }
-    
+    public static class ConvertTo2DPoint implements Converter
+    { @Override public Object convert (List<String> args) { return new PVector(Integer.parseInt(args.get(0)), Integer.parseInt(args.get(1))); } }
     
     // TODO: do we need G at all?
     /*
@@ -117,47 +118,56 @@ public class DrawHyperGraph extends PApplet
     public static float edgeOffset = (1 + sqrt(5)) / 2;
     
     // TODO: add an example json into description
-    @CommandLineConfigurable(description="Additionally read json information from given graph.",neededParameters=0)
+    @CommandLineConfigurable(description="Additionally read json information from given graph.", neededParameters=0)
     boolean readColors;
     
+    @CommandLineConfigurable(description="Cannot move camera with arrow keys.", neededParameters=0)
     public boolean movementDisabled = false;
     
+    @CommandLineConfigurable(description="The given graph is converted to a undirected graph.", neededParameters=0)
     public static boolean undirected = false;
     
+    @CommandLineConfigurable(description="The given graph is converted to a undirected graph.", neededParameters=2, function=ConvertTo2DPoint.class)
     public PVector topLeftCameraOffsetFromOrigin = new PVector(0, 0);
     
     @CommandLineConfigurable(description="How quickly the camera will move around when the arrow keys are pressed.")
     public static float panIncrement = 6;
     
     @CommandLineConfigurable(description="Horizontal camera speed.")
-    public static float horizantalPanIncrement = 6;
+    public static float horizantalPanIncrement = -1;
     
     @CommandLineConfigurable(description="Vertical camera speed.")
-    public static float verticalPanIncrement = 6;
+    public static float verticalPanIncrement = -1;
     
     public static boolean noOutOfBounds = false;
     
     public static boolean fullscreen = false;
     
-    @CommandLineConfigurable(description="The default color for a vertex.",function=ConvertToColor.class,neededParameters=3)
+    @CommandLineConfigurable(description="The default color for a vertex.", function=ConvertToColor.class, neededParameters=3)
     private static Color baseVertexColor = new Color(0,0,0);
     
-    @CommandLineConfigurable(description="The default color for a vertex label.",function=ConvertToColor.class,neededParameters=3)
+    @CommandLineConfigurable(description="The default color for a vertex label.", function=ConvertToColor.class, neededParameters=3)
     private static Color baseVertexLabelColor = new Color(0,0,0);
     
-    @CommandLineConfigurable(description="The default color for a edges.",function=ConvertToColor.class,neededParameters=3)
+    @CommandLineConfigurable(description="The default color for a edges.", function=ConvertToColor.class, neededParameters=3)
     private static Color baseEdgeColor = new Color(0,0,0);
     
-    @CommandLineConfigurable(description="The default color for a edge labels.",function=ConvertToColor.class,neededParameters=3)
+    @CommandLineConfigurable(description="The default color for a edge labels.", function=ConvertToColor.class, neededParameters=3)
     private static Color baseEdgeLabelColor = new Color(0,0,0);
     
     @CommandLineConfigurable(description="Vertex and edge color information from a file.")
     public static String readColorInformationFromFile = null;
     
-    @CommandLineConfigurable(description="Vertex and edge color information from the input.",neededParameters = 0)
+    @CommandLineConfigurable(description="Vertex and edge color information from the input.", neededParameters = 0)
     public static boolean readColorInformationFromInput;
     
+    @CommandLineConfigurable(description="Will assume input is a tree and organize the graph under that assumption.", neededParameters = 0)
     public static boolean tree = false;
+    
+    boolean snapToGrid = false;
+    
+    @CommandLineConfigurable(description="When snap to grid mode is active (g key) then moving vertices will move according to a grid.", neededParameters = 1)
+    int gridSize = 100;
     
     public static final float PHI = (1 + sqrt(5)) / 2;
 
@@ -189,6 +199,10 @@ public class DrawHyperGraph extends PApplet
         // TODO: we shouldn't change the graph, we just want to change how we draw the graph
         if (undirected)
             graphs.forEach(graph -> graph.edges().forEach(edge -> edge.orientations.replaceAll((v, b) -> false)));
+        
+        
+        if (horizantalPanIncrement < 0) horizantalPanIncrement = panIncrement;
+        if (verticalPanIncrement < 0) verticalPanIncrement = panIncrement;
         
         
         // initially no vertex is being manipulated
@@ -291,13 +305,51 @@ public class DrawHyperGraph extends PApplet
 
         // move held vertex to the mouse
         if (held != null)
-            vertexLocations.put(held, new PVector(mouseX, mouseY).add(heldOffset));
+        {
+            if (snapToGrid)
+            {
+//                PVector absoluteLocationOfGrid = new PVector(mouseX, mouseY).add(topLeftCameraOffsetFromOrigin).div(gridSize);
+//                Function<Integer, Function<Float, Function<Integer, Integer>>> findCloser = left -> center -> right -> 
+//                {
+//                    return abs(left - center) < abs(right - center) ? left : right;
+//                };
+//                absoluteLocationOfGrid = new PVector(
+//                    findCloser.apply(round(floor(absoluteLocationOfGrid.x))).apply(absoluteLocationOfGrid.x).apply(round(ceil(absoluteLocationOfGrid.x))), 
+//                    findCloser.apply(round(floor(absoluteLocationOfGrid.y))).apply(absoluteLocationOfGrid.y).apply(round(ceil(absoluteLocationOfGrid.y))));
+//                vertexLocations.put(held, absoluteLocationOfGrid.mult(gridSize).sub(topLeftCameraOffsetFromOrigin.copy()));
+                
+                
+                ;
+                vertexLocations.put(held, snapRelativeToGrid(topLeftCameraOffsetFromOrigin, new PVector(mouseX, mouseY), gridSize));
+            }
+            else
+                vertexLocations.put(held, new PVector(mouseX, mouseY).add(heldOffset));
+        }
         if (noOutOfBounds)
             for (Vertex v : graphs.get(currentGraph).vertices) // TODO: there is a much nicer way of doing this using map methods
                 vertexLocations.put(v, new PVector(
                     constrain(vertexLocations.get(v).x, vertexRadius + 1, width - vertexRadius - 1),
                     constrain(vertexLocations.get(v).y, vertexRadius + 1, height - vertexRadius - 1)
                 ));
+    }
+    
+    public static PVector snapRelativeToGrid(PVector originRelative, PVector relativeRelative, int size)
+    { originRelative = originRelative.copy(); relativeRelative = relativeRelative.copy();
+    
+        return closestIntegerPoint((relativeRelative.add(originRelative)).div(size)).mult(size).sub(originRelative);
+    }
+    
+    // find closest point that also consists only of integer values
+    public static PVector closestIntegerPoint(PVector point)
+    {
+        return new PVector(
+                    returnClosest(round(floor(point.x)), point.x, round(ceil(point.x))), 
+                    returnClosest(round(floor(point.y)), point.y, round(ceil(point.y))));
+    }
+    
+    public static int returnClosest(int left, float center, int right)
+    {
+        return abs(left - center) < abs(right - center) ? left : right;
     }
     
     
@@ -362,6 +414,14 @@ public class DrawHyperGraph extends PApplet
             {
                 zoomingOut = false;
             } break;
+            case 'g':
+            {
+                snapToGrid = !snapToGrid;
+                if (snapToGrid)
+                    for (Vertex v : vertexLocations.keySet())
+                        vertexLocations.put(v, snapRelativeToGrid(topLeftCameraOffsetFromOrigin, vertexLocations.get(v), gridSize));
+                    
+            } break;
         }
         if (keyCode == UP)
             movingUp = false;
@@ -382,18 +442,18 @@ public class DrawHyperGraph extends PApplet
             vertexRadius -= .125f;
             if (vertexRadius <= 5)
                 vertexRadius = 5;
-            else
-                for (Vertex v : vertexLocations.keySet())
-                    vertexLocations.get(v).add(PVector.fromAngle(angleBetween(vertexLocations.get(v), new PVector(width / 2, height / 2))).normalize().mult(.25f));
+            else ;
+//                for (Vertex v : vertexLocations.keySet())
+//                    vertexLocations.get(v).add(PVector.fromAngle(angleBetween(vertexLocations.get(v), new PVector(width / 2, height / 2))).normalize().mult(.25f));
         }
         else if (zoomingOut)
         {
             vertexRadius += .125f;
             if (vertexRadius >= 500)
                 vertexRadius = 500;
-            else 
-                for (Vertex v : vertexLocations.keySet())
-                    vertexLocations.get(v).add(PVector.fromAngle(angleBetween(new PVector(width / 2, height / 2), vertexLocations.get(v))).normalize().mult(.25f));
+            else ;
+//                for (Vertex v : vertexLocations.keySet())
+//                    vertexLocations.get(v).add(PVector.fromAngle(angleBetween(new PVector(width / 2, height / 2), vertexLocations.get(v))).normalize().mult(.25f));
         }
         
         PVector movement = new PVector(0,0);
@@ -913,7 +973,8 @@ public class DrawHyperGraph extends PApplet
     {
         for (Method m : GenerateGraph.class.getMethods())
             // A.containsAll(B) iff B subseteq A
-            if (new HashSet<>(asList(Integer.class, int.class, float.class, Float.class, boolean.class, Boolean.class, String.class)).containsAll(new HashSet<>(asList(m.getParameterTypes()))))
+            if (new HashSet<>(asList(Integer.class, int.class, float.class, Float.class, boolean.class, Boolean.class, String.class)).
+                    containsAll(new HashSet<>(asList(m.getParameterTypes()))))
                 if (!m.getName().startsWith("lambda$")) // filter out lambdas
                     if (Graph.class.equals(m.getReturnType())
                         || (m.getGenericReturnType() instanceof ParameterizedType

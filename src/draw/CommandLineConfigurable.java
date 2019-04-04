@@ -21,13 +21,13 @@ public @interface CommandLineConfigurable
     int neededParameters() default 1;
 
     // TODO: remove or support having different flag names
-    String flagName() default "";
+    String[] flagName() default {};
     
     String description() default "Does something!";
     
-    Class<?> function() default Identity.class;
+    Class<? extends Converter> function() default DefaultConverter.class;
     
-    public class Identity implements Converter
+    public class DefaultConverter implements Converter
     {
         @Override
         public Object convert (List<String> args)
