@@ -164,10 +164,12 @@ public class DrawHyperGraph extends PApplet
     @CommandLineConfigurable(description="Will assume input is a tree and organize the graph under that assumption.", neededParameters = 0)
     public static boolean tree = false;
     
+//    public static Class<?> graphGeneratingClass = classForName(GenerateGraph.class.getName());
+    
     boolean snapToGrid = false;
     
     @CommandLineConfigurable(description="When snap to grid mode is active (g key) then moving vertices will move according to a grid.", neededParameters = 1)
-    int gridSize = 100;
+    public static int gridSize = 100;
     
     public static final float PHI = (1 + sqrt(5)) / 2;
 
@@ -318,8 +320,6 @@ public class DrawHyperGraph extends PApplet
 //                    findCloser.apply(round(floor(absoluteLocationOfGrid.y))).apply(absoluteLocationOfGrid.y).apply(round(ceil(absoluteLocationOfGrid.y))));
 //                vertexLocations.put(held, absoluteLocationOfGrid.mult(gridSize).sub(topLeftCameraOffsetFromOrigin.copy()));
                 
-                
-                ;
                 vertexLocations.put(held, snapRelativeToGrid(topLeftCameraOffsetFromOrigin, new PVector(mouseX, mouseY), gridSize));
             }
             else
@@ -334,9 +334,8 @@ public class DrawHyperGraph extends PApplet
     }
     
     public static PVector snapRelativeToGrid(PVector originRelative, PVector relativeRelative, int size)
-    { originRelative = originRelative.copy(); relativeRelative = relativeRelative.copy();
-    
-        return closestIntegerPoint((relativeRelative.add(originRelative)).div(size)).mult(size).sub(originRelative);
+    {
+        return closestIntegerPoint((originRelative.copy().add(relativeRelative)).div(size)).mult(size).sub(originRelative);
     }
     
     // find closest point that also consists only of integer values
@@ -414,13 +413,14 @@ public class DrawHyperGraph extends PApplet
             {
                 zoomingOut = false;
             } break;
-            case 'g':
+            case 'h': // snap held vertex to grid mode
             {
                 snapToGrid = !snapToGrid;
-                if (snapToGrid)
-                    for (Vertex v : vertexLocations.keySet())
-                        vertexLocations.put(v, snapRelativeToGrid(topLeftCameraOffsetFromOrigin, vertexLocations.get(v), gridSize));
-                    
+            } break;
+            case 'g': // snap all vertices to grid
+            {
+                for (Vertex v : vertexLocations.keySet())
+                    vertexLocations.put(v, snapRelativeToGrid(topLeftCameraOffsetFromOrigin, vertexLocations.get(v), gridSize));
             } break;
         }
         if (keyCode == UP)
@@ -431,6 +431,7 @@ public class DrawHyperGraph extends PApplet
              movingDown = false;
         if (keyCode == LEFT)
             movingLeft = false;
+        cameraMovement();
     }
     public void handleInput()
     {
@@ -455,7 +456,11 @@ public class DrawHyperGraph extends PApplet
 //                for (Vertex v : vertexLocations.keySet())
 //                    vertexLocations.get(v).add(PVector.fromAngle(angleBetween(new PVector(width / 2, height / 2), vertexLocations.get(v))).normalize().mult(.25f));
         }
-        
+        cameraMovement();
+    }
+    
+    public void cameraMovement()
+    {
         PVector movement = new PVector(0,0);
         if (movingUp)
             movement.add(PVector.fromAngle(PI / 2).normalize().mult(verticalPanIncrement));
@@ -470,6 +475,7 @@ public class DrawHyperGraph extends PApplet
             vertexLocations.get(v).add(movement);
         this.topLeftCameraOffsetFromOrigin.sub(movement);
     }
+    
 
     public static float TAU = PI * 2;
     public void drawEdge (Edge e, int i)
@@ -872,8 +878,10 @@ public class DrawHyperGraph extends PApplet
                 // although could have a type hierarchy where each node in the
                 // path a different set of graph generating algorithms
                 // TODO: implement a way of invoking multiple menthods
-                Method graphGeneratingMethod = GenerateGraph.class.getMethod(methodName, methodArgTypes);
                 
+                
+                Method graphGeneratingMethod = GenerateGraph.class.getMethod(methodName, methodArgTypes);
+//                graphGeneratingMethod = graphGeneratingClass.getMethod(methodName, methodArgTypes);
                 
 //               
                 if (Graph.class.equals(graphGeneratingMethod.getReturnType()))
@@ -1170,6 +1178,19 @@ public class DrawHyperGraph extends PApplet
     public void line (PVector start, PVector end)
     {
         line(start.x, start.y, end.x, end.y);
+    }
+    
+    // this is dumb
+    private static Class<?> classForName (String name)
+    {
+        try
+        {
+            return Class.forName(name);
+        }
+        catch (ClassNotFoundException ex)
+        {
+            return null;
+        }
     }
 } // end class DrawHyperGraph
 
