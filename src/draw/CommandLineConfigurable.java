@@ -23,9 +23,9 @@ public @interface CommandLineConfigurable
     // TODO: remove or support having different flag names
     String[] flagName() default {};
     
-    String description() default "Does something!";
+    String description() default "Used for something!";
     
-    Class<? extends Converter> function() default DefaultConverter.class;
+    Class<? extends Converter> converter() default DefaultConverter.class;
     
     public class DefaultConverter implements Converter
     {
@@ -45,6 +45,8 @@ public @interface CommandLineConfigurable
             return null;
         }
         
+        @Override public int numberOfArguments () { return 1; }
+        
         public static Pattern scannerPattern(String pattern)
         {
             Pattern p = null;
@@ -53,8 +55,9 @@ public @interface CommandLineConfigurable
                 Method m = Scanner.class.getDeclaredMethod(pattern);
                 m.setAccessible(true);
                 p = (Pattern)m.invoke(new Scanner(""));
-            } catch (SecurityException | NoSuchMethodException | IllegalAccessException | IllegalArgumentException | InvocationTargetException ex)
-            { ex.printStackTrace();}
+            }
+            catch (SecurityException | NoSuchMethodException | IllegalAccessException | IllegalArgumentException | InvocationTargetException ex)
+            { ; }
             return p;
         }
     }

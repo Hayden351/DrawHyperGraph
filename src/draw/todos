@@ -1,9 +1,18 @@
 Replace pseudo zooming with an actual zoom. (Vertices move to proper locations, make sure all elements are zooming)
 
 Create a command line program that can attach to a draw graph window and
-run commands to mutate the graph, the window, and the visualization
+run commands to mutate/query the graph, the window, and the visualization.
+ *  Graph
+     *  Add or remove edges or vertices
+     *  Find paths
+ *  the window
+     *  width/height of the window
+ *  the visualization
+     *  the zoom level
+     *  the color of vertices/edges
 
-A central node that has 
+
+Write representation of graph and graph to json.
 
 
 
