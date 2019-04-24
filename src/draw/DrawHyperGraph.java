@@ -140,7 +140,7 @@ public class DrawHyperGraph extends PApplet
     @CommandLineConfigurable(description="The given graph is converted to a undirected graph.", converter=BooleanFlag.class)
     public static boolean undirected = false;
     
-    @CommandLineConfigurable(description="The given graph is converted to a undirected graph.", neededParameters=2, converter=ConvertTo2DPoint.class)
+    @CommandLineConfigurable(description="The absolute location of the top left corner of the window.", neededParameters=2, converter=ConvertTo2DPoint.class)
     public PVector topLeftCameraOffsetFromOrigin = new PVector(0, 0);
     
     @CommandLineConfigurable(description="How quickly the camera will move around when the arrow keys are pressed.")
@@ -263,8 +263,8 @@ public class DrawHyperGraph extends PApplet
         
         // set each edge to not be directed towards any of its vertices
         // TODO: we shouldn't change the graph, we just want to change how we draw the graph
-        if (undirected)
-            graphs.forEach(graph -> graph.edges().forEach(edge -> edge.orientations.replaceAll((v, b) -> false)));
+//        if (undirected)
+//            graphs.forEach(graph -> graph.edges().forEach(edge -> edge.orientations.replaceAll((v, b) -> false)));
         
         
         if (horizantalPanIncrement < 0) horizantalPanIncrement = panIncrement;
@@ -303,18 +303,19 @@ public class DrawHyperGraph extends PApplet
 //        System.out.println(graphs.get(currentGraph));
     }
     
-    public int printLocationOccassionally = 0;
+//    public int printLocationOccassionally = 0;
     @Override
     public void draw ()
     {
-        // logs the current location
-        if (printLocationOccassionally < 300)
-            printLocationOccassionally++;
-        else
-        {
-            out.printf("[ %s %s ]\n", this.topLeftCameraOffsetFromOrigin.x, this.topLeftCameraOffsetFromOrigin.y);
-            printLocationOccassionally = 0;
-        }
+        // @Cleanup: pretty sure I should just remove this
+//        // logs the current location
+//        if (printLocationOccassionally < 300)
+//            printLocationOccassionally++;
+//        else
+//        {
+//            out.printf("[ %s %s ]\n", this.topLeftCameraOffsetFromOrigin.x, this.topLeftCameraOffsetFromOrigin.y);
+//            printLocationOccassionally = 0;
+//        }
         
         background(255);
 
@@ -796,7 +797,6 @@ public class DrawHyperGraph extends PApplet
     // TODO: move and maybe 
     public static void main (String[] args)
     {
-        System.out.println(Arrays.toString(args));
         baseVertexColor = new Color(0,0,0);
         String[] appletArgs = new String[]{"draw.DrawHyperGraph"};
         
@@ -816,15 +816,6 @@ public class DrawHyperGraph extends PApplet
                         appletArgs = new String[]{"--present", "--window-color=#666666", "--hide-stop", "draw.DrawHyperGraph"};
                         fullscreen = true;
                     } break;
-                    case "-vertexColor":
-                    {
-                        baseVertexColor = new Color
-                            (
-                                Integer.parseInt(args[++i]),
-                                Integer.parseInt(args[++i]),
-                                Integer.parseInt(args[++i])
-                            );
-                    } break;
                     case "-size":
                     {
                         // TODO: replace parse int with a state machine
@@ -834,17 +825,13 @@ public class DrawHyperGraph extends PApplet
                         initialWidth = Integer.parseInt(args[++i]);
                         initialHeight = Integer.parseInt(args[++i]);
                     } break;
-                    case "-undirected":
-                    {
-                        undirected = false;
-                    } break;
                     case "-tree":
                     {
                         tree = true;
                     } break;
                     default:
                     {
-                        flag = flag.substring(1);
+                        flag = flag.substring(1); // advance to the next token
                         boolean flagTripped = false;
                         
                         try
@@ -860,9 +847,10 @@ public class DrawHyperGraph extends PApplet
                                     List<String> parameterArgs = new ArrayList<>();
                                     for (int argCount = 0; argCount < converter.numberOfArguments(); argCount++)
                                     {
+                                        i++;
                                         // TODO: i holds the posiiton of the previously used
                                         // probably want to change it so it holds the next usable
-                                        String parameterArg = args[i++]; // increment i to next command line token
+                                        String parameterArg = args[i]; // increment i to next command line token
                                         Pattern p = Pattern.compile("^--?");
                                         if (p.matcher(parameterArg).matches())
                                             ; // then error, expected arg but recieved a flag
@@ -886,6 +874,7 @@ public class DrawHyperGraph extends PApplet
                         // TODO: make error handling not garbage
                         if (!flagTripped)
                         {
+                            System.out.println(Arrays.toString(args));
                             System.out.printf("Unrecognized flag %s\n", flag);
                             // https://stackoverflow.com/questions/11158235/get-name-of-executable-jar-from-within-main-method
                             // get name of executable if i really want it
@@ -1017,6 +1006,7 @@ public class DrawHyperGraph extends PApplet
         }
         else // no arguments given
         {
+            System.out.println(Arrays.toString(args));
             System.out.println("Usage:\n<executable> <config> <generate-graph-function> <function-arguments>");
             System.out.println("");
             
