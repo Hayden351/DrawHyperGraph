@@ -286,37 +286,11 @@ public class DrawHyperGraph extends PApplet
         else
             for (Graph G : graphs)
                 placeVerticesRandom(G);
-        
-        // TODO:
-        if (readColorInformationFromFile != null)
-        {
-//            try
-//            {
-//                JsonNode node = new ObjectMapper().readTree(readColorInformationFromFile);
-//            }
-//            catch (IOException ex)
-//            {
-//                System.out.println("Couldn't add color information");
-//            }
-        }
-        
-//        System.out.println(graphs.get(currentGraph));
     }
     
-//    public int printLocationOccassionally = 0;
     @Override
     public void draw ()
     {
-        // @Cleanup: pretty sure I should just remove this
-//        // logs the current location
-//        if (printLocationOccassionally < 300)
-//            printLocationOccassionally++;
-//        else
-//        {
-//            out.printf("[ %s %s ]\n", this.topLeftCameraOffsetFromOrigin.x, this.topLeftCameraOffsetFromOrigin.y);
-//            printLocationOccassionally = 0;
-//        }
-        
         background(255);
 
         handleInput();
@@ -364,30 +338,37 @@ public class DrawHyperGraph extends PApplet
 
         // move held vertex to the mouse
         if (held != null)
-        {
             if (snapToGrid)
-            {
-//                PVector absoluteLocationOfGrid = new PVector(mouseX, mouseY).add(topLeftCameraOffsetFromOrigin).div(gridSize);
-//                Function<Integer, Function<Float, Function<Integer, Integer>>> findCloser = left -> center -> right -> 
-//                {
-//                    return abs(left - center) < abs(right - center) ? left : right;
-//                };
-//                absoluteLocationOfGrid = new PVector(
-//                    findCloser.apply(round(floor(absoluteLocationOfGrid.x))).apply(absoluteLocationOfGrid.x).apply(round(ceil(absoluteLocationOfGrid.x))), 
-//                    findCloser.apply(round(floor(absoluteLocationOfGrid.y))).apply(absoluteLocationOfGrid.y).apply(round(ceil(absoluteLocationOfGrid.y))));
-//                vertexLocations.put(held, absoluteLocationOfGrid.mult(gridSize).sub(topLeftCameraOffsetFromOrigin.copy()));
-                
                 vertexLocations.put(held, snapRelativeToGrid(topLeftCameraOffsetFromOrigin, new PVector(mouseX, mouseY), gridSize));
-            }
             else
                 vertexLocations.put(held, new PVector(mouseX, mouseY).add(heldOffset));
-        }
+        
         if (noOutOfBounds)
             for (Vertex v : graphs.get(currentGraph).vertices) // TODO: there is a much nicer way of doing this using map methods
                 vertexLocations.put(v, new PVector(
                     constrain(vertexLocations.get(v).x, vertexRadius + 1, width - vertexRadius - 1),
                     constrain(vertexLocations.get(v).y, vertexRadius + 1, height - vertexRadius - 1)
                 ));
+    }
+    
+    public static <T> List<List<T>> partition(List<T> elements, BiPredicate<T, T> equivalenceRelation)
+    {
+        List<List<T>> partitions = new ArrayList<>();
+        elements.forEach // matches an edge into a edge class
+        (element ->   partitions.stream().
+                    // partition.get(0) : get representative element of partition
+                    // all of the elements are equivalent according to the
+                    // equivalence relation
+                    filter(partition -> equivalenceRelation.test(element, partition.get(0))).
+                    findFirst().orElseGet(() -> 
+                    {   // create a new partition for the element that doesn't
+                        // match any other partition
+                        ArrayList<T> newPartition = new ArrayList<>();
+                        partitions.add(newPartition);
+                        return newPartition;
+                    }).
+                    add(element));
+        return partitions;
     }
     
     public static PVector snapRelativeToGrid(PVector originRelative, PVector relativeRelative, int size)
@@ -499,8 +480,9 @@ public class DrawHyperGraph extends PApplet
         if (zoomingIn)
         {
             // https://www.youtube.com/results?search_query=projection+matrices+
-            PVector zoomCenter = new PVector(mouseX, mouseY).add(topLeftCameraOffsetFromOrigin);
-            topLeftCameraOffsetFromOrigin = zoomCenter.copy().add(topLeftCameraOffsetFromOrigin.copy().sub(zoomCenter).mult(Z));
+//            PVector zoomCenter = new PVector(mouseX, mouseY).add(topLeftCameraOffsetFromOrigin);
+//            topLeftCameraOffsetFromOrigin = zoomCenter.copy().add(topLeftCameraOffsetFromOrigin.copy().sub(zoomCenter).mult(Z));
+            
             
 //            topLeftCameraOffsetFromOrigin.add(zoomCenter);
 //            PVector oldViewCenter = new PVector(topLeftCameraOffsetFromOrigin.x, topLeftCameraOffsetFromOrigin.y);
@@ -508,10 +490,10 @@ public class DrawHyperGraph extends PApplet
 //            
             
             
-//            vertexRadius -= .125f;
-//            if (vertexRadius <= 5)
-//                vertexRadius = 5;
-//            else ;
+            vertexRadius -= .125f;
+            if (vertexRadius <= 5)
+                vertexRadius = 5;
+            else ;
 //                for (Vertex v : vertexLocations.keySet())
 //                    vertexLocations.get(v).add(PVector.fromAngle(angleBetween(vertexLocations.get(v), new PVector(width / 2, height / 2))).normalize().mult(.25f));
         }
@@ -703,7 +685,7 @@ public class DrawHyperGraph extends PApplet
         for (Vertex v : graphs.get(currentGraph).vertices())
         {
             PVector vLoc = vertexLocations.get(v);
-            if (Utils.distance(mouseX, mouseY, vLoc.x, vLoc.y) <= vertexRadius)
+            if (VectorUtils.distance(mouseX, mouseY, vLoc.x, vLoc.y) <= vertexRadius)
             {
                 held = v;
                 heldOffset = vectorFromTo(mouseX, mouseY, vLoc.x, vLoc.y);
@@ -883,7 +865,7 @@ public class DrawHyperGraph extends PApplet
                             StringBuilder debugArrow = new StringBuilder();
                             
                             for (int index = 1; index <= i; index++)
-                                debugArrow.append(Utils.repititionsOf(" ", args[index - 1].length())).append(" ");
+                                debugArrow.append(StringUtils.repititionsOf(" ", args[index - 1].length())).append(" ");
                             debugArrow.append("^");
                             System.out.println(debugArrow);
                             
@@ -1182,7 +1164,7 @@ public class DrawHyperGraph extends PApplet
 
                     // TODO: this logic is kind of wonky
                     int giveUp = width * height;
-                    while (Utils.isLocationAwayFrom(placementLocation, vertexLocations, vertexRadius * 3))
+                    while (VectorUtils.isLocationAwayFrom(placementLocation, vertexLocations, vertexRadius * 3))
                     {
                         PVector newLocation  = placementLocation.copy().add(new PVector(5 * cos(angleFromParent), 5 * sin(angleFromParent)));
 
@@ -1247,3 +1229,4 @@ public class DrawHyperGraph extends PApplet
 // -vertexColor 255 40 60 -fullscreen -vertexRadius 60 -size 400 200 randomGraph int 8 int 4
 // -baseVertexColor 255 0 0 -baseEdgeColor 0 255 0 -panIncrement 20 -initialWidth 1000 -vertexRadius 20 undirectedUnlabeledGraphFrom String "0 1 1 0 0~0 0 0 1 1~0 0 0 0 0~0 0 0 0 0~0 0 0 0 0"
 // java -jar dist\DrawHyperGraph.jar -readColorInformationFromInput -baseVertexColor 0 0 255 -baseVertexLabelColor 0 0 255 -baseEdgeColor 0 0 255 -baseEdgeLabelColor 0 255 0 graphFromJsonFile String src/draw/json
+// -undirected -readLocationInformationFromInput -baseVertexColor 123 222 129  -readColorInformationFromInput graphFromJsonFile String src/draw/json
