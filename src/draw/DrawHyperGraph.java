@@ -392,6 +392,7 @@ public class DrawHyperGraph extends PApplet
     
     // i don't know maybe this will help
     // https://www.gamedev.net/forums/topic/594055-zooming-onto-an-arbitrary-point/
+    public static final char CTRL_S = 19;
     public void keyPressed()
     {
         switch (key) // the illusion of zooming in/out
@@ -412,6 +413,10 @@ public class DrawHyperGraph extends PApplet
             {
                 currentGraph = constrain(currentGraph + 1, 0, graphs.size() - 1);
             } break;
+            case CTRL_S:
+            {
+                save("SavedGraph.png");
+            }
         } 
         switch (keyCode)
         {
