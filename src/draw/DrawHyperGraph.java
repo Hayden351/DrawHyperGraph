@@ -2,13 +2,12 @@ package draw;
 
 //import com.fasterxml.jackson.databind.JsonNode;
 //import com.fasterxml.jackson.databind.ObjectMapper;
+import populate_from_args.Converter;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import deprecated.DrawGraphAPI;
-import deprecated.Command;
-import deprecated.ApiState;
 import processing.core.*;
 
 import java.util.TreeMap;
@@ -24,18 +23,11 @@ import definition.GraphProperties;
 import java.awt.Color;
 import java.io.File;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.io.PrintStream;
-import java.lang.management.ManagementFactory;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
-import java.net.MalformedURLException;
-import java.rmi.Naming;
-import java.rmi.RemoteException;
-import java.rmi.registry.LocateRegistry;
-import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
@@ -47,17 +39,16 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.function.BiPredicate;
-import java.util.function.Function;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import populate_from_args.NamedArgument;
 
 
 // fromAST String C:\Users\DarkFight753\OneDrive\NBMisc\DirectedMethodPath\src\directedmethodpath\test_classes\InsideOnly.java
 // fromAST String C:\Users\DarkFight753\OneDrive\NBMisc\DirectedMethodPath\src\directedmethodpath\test_classes\TestClass.java
 public class DrawHyperGraph extends PApplet
 {
+    // TODO: do i still want to use this?
     public static class GraphDrawingData
     {
         Graph G;
@@ -68,6 +59,9 @@ public class DrawHyperGraph extends PApplet
         /*
         in order to get color information i simply have to parse the json a 
         second time while parsing it to get the graph information
+        
+        doing 2 passes feels bad though
+        
         */
         
     }
@@ -80,7 +74,7 @@ public class DrawHyperGraph extends PApplet
     // track the locations of vertices in the drawing
     public static TreeMap<Vertex, PVector> vertexLocations = new TreeMap<>();
     // track which vertex is currently being moved by the mouse
-    public static Vertex held;
+    public static List<Vertex> held;
     public static PVector heldOffset;
     public static List<Graph> graphs = new ArrayList<>();
     public static int currentGraph = 0;
@@ -91,17 +85,17 @@ public class DrawHyperGraph extends PApplet
 //    { @Override public Object convert (List<String> args) { return Boolean.valueOf(args.get(0)); } }
     public static class ConvertToColor implements Converter
     {
-        @Override public Object convert (List<String> args) { return new Color(Integer.parseInt(args.get(0)), Integer.parseInt(args.get(1)), Integer.parseInt(args.get(2))); }
+        @Override public Color convert (List<String> args) { return new Color(Integer.parseInt(args.get(0)), Integer.parseInt(args.get(1)), Integer.parseInt(args.get(2))); }
         @Override public int numberOfArguments () { return 3; }
     }
     public static class ConvertTo2DPoint implements Converter
     {
-        @Override public Object convert (List<String> args) { return new PVector(Integer.parseInt(args.get(0)), Integer.parseInt(args.get(1))); }
+        @Override public PVector convert (List<String> args) { return new PVector(Integer.parseInt(args.get(0)), Integer.parseInt(args.get(1))); }
         @Override public int numberOfArguments () { return 2; }
     }
     public static class BooleanFlag implements Converter
     {
-        @Override public Object convert (List<String> args) { return true; }
+        @Override public Boolean convert (List<String> args) { return true; }
         @Override public int numberOfArguments () { return 0; }
     }
     
@@ -112,82 +106,82 @@ public class DrawHyperGraph extends PApplet
 //    public static Graph G;
 
     // TODO: there is a lookup for global variables for
-    @CommandLineConfigurable(description="The radius of the circle the represents a vertex in the graph.")
+    @NamedArgument(description="The radius of the circle the represents a vertex in the graph.")
     private static float vertexRadius = 30;
     
-    @CommandLineConfigurable(description="Will increase the width of the triangles that are at the end of a directed edges.")
+    @NamedArgument(description="Will increase the width of the triangles that are at the end of a directed edges.")
     private static float headingWidth = 10;
     
-    @CommandLineConfigurable(description="Will increase the height of the triangles that are at the end of a directed edges.")
+    @NamedArgument(description="Will increase the height of the triangles that are at the end of a directed edges.")
     private static float headingHeight = 15;
     
-    @CommandLineConfigurable(description="The width of the window that contains the drawing.")
+    @NamedArgument(description="The width of the window that contains the drawing.")
     private static int initialWidth = 500;
     
-    @CommandLineConfigurable(description="The height of the window that contains the drawing.")
+    @NamedArgument(description="The height of the window that contains the drawing.")
     private static int initialHeight = 500;
 
-    @CommandLineConfigurable(description="The edge offset factor when edges are overlapped.")
+    @NamedArgument(description="The edge offset factor when edges are overlapped.")
     public static float edgeOffset = (1 + sqrt(5)) / 2;
     
     // TODO: add an example json into description
-    @CommandLineConfigurable(description="Additionally read json information from given graph.", converter=BooleanFlag.class)
-    boolean readColors;
+    @NamedArgument(description="Additionally read json information from given graph.", converter=BooleanFlag.class)
+    public static boolean readColors;
     
-    @CommandLineConfigurable(description="Cannot move camera with arrow keys.", converter=BooleanFlag.class)
+    @NamedArgument(description="Cannot move camera with arrow keys.", converter=BooleanFlag.class)
     public boolean movementDisabled = false;
     
-    @CommandLineConfigurable(description="The given graph is converted to a undirected graph.", converter=BooleanFlag.class)
+    @NamedArgument(description="The given graph is converted to a undirected graph.", converter=BooleanFlag.class)
     public static boolean undirected = false;
     
-    @CommandLineConfigurable(description="The absolute location of the top left corner of the window.", neededParameters=2, converter=ConvertTo2DPoint.class)
-    public PVector topLeftCameraOffsetFromOrigin = new PVector(0, 0);
+    @NamedArgument(description="The absolute location of the top left corner of the window.", neededParameters=2, converter=ConvertTo2DPoint.class)
+    public static PVector topLeftCameraOffsetFromOrigin = new PVector(0, 0);
     
-    @CommandLineConfigurable(description="How quickly the camera will move around when the arrow keys are pressed.")
+    @NamedArgument(description="How quickly the camera will move around when the arrow keys are pressed.")
     public static float panIncrement = 6;
     
-    @CommandLineConfigurable(description="Horizontal camera speed.")
+    @NamedArgument(description="Horizontal camera speed.")
     public static float horizantalPanIncrement = -1;
     
-    @CommandLineConfigurable(description="Vertical camera speed.")
+    @NamedArgument(description="Vertical camera speed.")
     public static float verticalPanIncrement = -1;
     
     public static boolean noOutOfBounds = false;
     
     public static boolean fullscreen = false;
     
-    @CommandLineConfigurable(description="The default color for a vertex.", converter=ConvertToColor.class, neededParameters=3)
+    @NamedArgument(description="The default color for a vertex.", converter=ConvertToColor.class, neededParameters=3)
     private static Color baseVertexColor = new Color(0,0,0);
     
-    @CommandLineConfigurable(description="The default color for a vertex label.", converter=ConvertToColor.class, neededParameters=3)
+    @NamedArgument(description="The default color for a vertex label.", converter=ConvertToColor.class, neededParameters=3)
     private static Color baseVertexLabelColor = new Color(0,0,0);
     
-    @CommandLineConfigurable(description="The default color for a edges.", converter=ConvertToColor.class, neededParameters=3)
+    @NamedArgument(description="The default color for a edges.", converter=ConvertToColor.class, neededParameters=3)
     private static Color baseEdgeColor = new Color(0,0,0);
     
-    @CommandLineConfigurable(description="The default color for a edge labels.", converter=ConvertToColor.class, neededParameters=3)
+    @NamedArgument(description="The default color for a edge labels.", converter=ConvertToColor.class, neededParameters=3)
     private static Color baseEdgeLabelColor = new Color(0,0,0);
     
-    @CommandLineConfigurable(description="Vertex and edge color information from a file.")
+    @NamedArgument(description="Vertex and edge color information from a file.")
     public static String readColorInformationFromFile = null;
     
-    @CommandLineConfigurable(description="Vertex and edge color information from the input.", converter=BooleanFlag.class)
+    @NamedArgument(description="Vertex and edge color information from the input.", converter=BooleanFlag.class)
     public static boolean readColorInformationFromInput;
     
-    @CommandLineConfigurable(description="Vertex location information from the input.", converter=BooleanFlag.class)
+    @NamedArgument(description="Vertex location information from the input.", converter=BooleanFlag.class)
     public static boolean readLocationInformationFromInput;
     
-    @CommandLineConfigurable(description="Will assume input is a tree and organize the graph under that assumption.", converter=BooleanFlag.class)
+    @NamedArgument(description="Will assume input is a tree and organize the graph under that assumption.", converter=BooleanFlag.class)
     public static boolean tree = false;
     
     public static Class<?> graphGeneratingClass = classForName(GenerateGraph.class.getName());
     
-    boolean snapToGrid = false;
+    public static boolean snapToGrid = false;
     
-    @CommandLineConfigurable(description="When snap to grid mode is active (g key) then moving vertices will move according to a grid.")
+    @NamedArgument(description="When snap to grid mode is active (g key) then moving vertices will move according to a grid.")
     public static int gridSize = 100;
     
-    @CommandLineConfigurable(description="The title that is displayed on the window bar.")
+    @NamedArgument(description="The title that is displayed on the window bar.")
     public static String title = "DrawHyperGraph";
     
     public static final float PHI = (1 + sqrt(5)) / 2;
@@ -208,6 +202,7 @@ public class DrawHyperGraph extends PApplet
         surface.setResizable(true);
         surface.setTitle(title);
         
+        // output state of the graph on program shutdown
         Runtime.getRuntime().addShutdownHook(new Thread(new Runnable()
         {
             public void run () 
@@ -225,6 +220,7 @@ public class DrawHyperGraph extends PApplet
                             PVector location = vertexLocations.get(v);
                             // we got lucky with location but we can't sanely serialize color
                             Color color = vertexColors.get(v);
+                            // this is a bit dumb
                             class CColor
                             {
                                 public int red;
@@ -272,7 +268,7 @@ public class DrawHyperGraph extends PApplet
         
         
         // initially no vertex is being manipulated
-        held = null;
+        held = new ArrayList<>();
         heldOffset = new PVector(0, 0);
 
         // start at center
@@ -293,7 +289,12 @@ public class DrawHyperGraph extends PApplet
     {
         background(255);
 
+        // we want to have a command promt that takes commands
         handleInput();
+        
+//        List<PVector> rectangle = getRectangleAroundVertices();
+//        for (int i = 0; i < rectangle.size(); i++)
+//            line(rectangle.get(i), rectangle.get((i + 1) % rectangle.size()));
         
         // draw vertices
         for (Vertex v : graphs.get(currentGraph).vertices())
@@ -339,9 +340,11 @@ public class DrawHyperGraph extends PApplet
         // move held vertex to the mouse
         if (held != null)
             if (snapToGrid)
-                vertexLocations.put(held, snapRelativeToGrid(topLeftCameraOffsetFromOrigin, new PVector(mouseX, mouseY), gridSize));
+                for (Vertex h : held)
+                    vertexLocations.put(h, snapRelativeToGrid(topLeftCameraOffsetFromOrigin, new PVector(mouseX, mouseY), gridSize));
             else
-                vertexLocations.put(held, new PVector(mouseX, mouseY).add(heldOffset));
+                for (Vertex h : held)
+                    vertexLocations.put(h, new PVector(mouseX, mouseY).add(heldOffset));
         
         if (noOutOfBounds)
             for (Vertex v : graphs.get(currentGraph).vertices) // TODO: there is a much nicer way of doing this using map methods
@@ -415,6 +418,7 @@ public class DrawHyperGraph extends PApplet
             } break;
             case CTRL_S:
             {
+//                draw();
                 save("SavedGraph.png");
             }
         } 
@@ -465,6 +469,37 @@ public class DrawHyperGraph extends PApplet
                 for (Vertex v : vertexLocations.keySet())
                     vertexLocations.put(v, snapRelativeToGrid(topLeftCameraOffsetFromOrigin, vertexLocations.get(v), gridSize));
             } break;
+            case 'p':
+            {
+                PVector initial = vertexLocations.values().iterator().next();
+                float xMin = initial.x;
+                float xMax = initial.x;
+                float yMin = initial.y;
+                float yMax = initial.y;
+                for (PVector location : vertexLocations.values())
+                {
+                    if (location.x < xMin) xMin = location.x;
+                    if (location.x > xMax) xMax = location.x;
+                    if (location.y < yMin) yMin = location.y;
+                    if (location.y > yMax) yMax = location.y;
+                }
+                xMin -= 2 * vertexRadius;
+                xMax += 2 * vertexRadius;
+                yMin -= 2 * vertexRadius;
+                yMax += 2 * vertexRadius;
+                
+                System.out.println(topLeftCameraOffsetFromOrigin);
+                System.out.println(vertexLocations.keySet().stream().map(v -> String.format("%s %s", v.label, vertexLocations.get(v))).collect(Collectors.toList()));
+                System.out.printf("%s %s %s %s\n\n", xMin, xMax, yMin, yMax);
+                surface.setSize((int)(xMax - xMin), (int)(yMax - yMin));
+                
+                
+                PVector movement = new PVector(-xMin, -yMin);
+                for (Vertex v : vertexLocations.keySet())
+                    vertexLocations.get(v).add(movement);
+                this.topLeftCameraOffsetFromOrigin.sub(movement);
+                
+            } break;
         }
         if (keyCode == UP)
             movingUp = false;
@@ -492,9 +527,6 @@ public class DrawHyperGraph extends PApplet
 //            topLeftCameraOffsetFromOrigin.add(zoomCenter);
 //            PVector oldViewCenter = new PVector(topLeftCameraOffsetFromOrigin.x, topLeftCameraOffsetFromOrigin.y);
 //            PVector newViewCenter = zoomCenter.copy();
-//            
-            
-            
             vertexRadius -= .125f;
             if (vertexRadius <= 5)
                 vertexRadius = 5;
@@ -531,6 +563,21 @@ public class DrawHyperGraph extends PApplet
         this.topLeftCameraOffsetFromOrigin.sub(movement);
     }
     
+    public static List<PVector> getRectangleAroundVertices()
+    {
+        float xMin = 0;
+        float xMax = 0;
+        float yMin = 0;
+        float yMax = 0;
+        for (PVector location : vertexLocations.values())
+        {
+            if (location.x < xMin) xMin = location.x;
+            if (location.x > xMin) xMax = location.x;
+            if (location.y < yMin) yMin = location.y;
+            if (location.y > yMin) yMax = location.y;
+        }
+        return new ArrayList<>(Arrays.asList(new PVector(xMin, yMin), new PVector(xMin, yMax), new PVector(xMax, yMin), new PVector(xMax, yMax)));
+    }
 
     public static float TAU = PI * 2;
     public void drawEdge (Edge e, int i, int classSize)
@@ -560,21 +607,20 @@ public class DrawHyperGraph extends PApplet
             PVector endLoc = vLoc.copy().add(PVector.fromAngle(end).mult(vertexRadius));
             PVector topRight = endLoc.copy().add(PVector.fromAngle(angle).mult(distance));
             
+            edgeSettings(e);
+            
+            line(startLoc, topLeft);
+            line(topLeft, topRight);
+            line(endLoc, topRight);
             if (isDirected)
             {
                 endLoc.add(PVector.fromAngle(angle).mult(headingHeight));
                 drawHeading(endLoc, angle + TAU / 2, headingWidth, headingHeight,e);
             }
             
-            
-            line(startLoc, topLeft);
-            line(topLeft, topRight);
-            line(endLoc, topRight);
-            
             edgeTextSettings(); // set setting for drawing the label of an edge
             
             edgeCenter = topLeft.copy().add(topRight).div(2);
-            
             text(e.label, edgeCenter.x, edgeCenter.y);
             return;
         }
@@ -679,22 +725,23 @@ public class DrawHyperGraph extends PApplet
                 (a,b) -> new PVector(a.x + b.x, a.y + b.y)
             ).
             div(graphs.get(currentGraph).vertices.size());
-        
-        
     }
 
     @Override
     public void mousePressed ()
     {
-        // hold vertex that mouse is hovering over
-        for (Vertex v : graphs.get(currentGraph).vertices())
+        if (mouseButton == RIGHT)
         {
-            PVector vLoc = vertexLocations.get(v);
-            if (VectorUtils.distance(mouseX, mouseY, vLoc.x, vLoc.y) <= vertexRadius)
+            // hold vertex that mouse is hovering over
+            for (Vertex v : graphs.get(currentGraph).vertices())
             {
-                held = v;
-                heldOffset = vectorFromTo(mouseX, mouseY, vLoc.x, vLoc.y);
-                return;
+                PVector vLoc = vertexLocations.get(v);
+                if (VectorUtils.distance(mouseX, mouseY, vLoc.x, vLoc.y) <= vertexRadius)
+                {
+                    held.add(v);
+                    heldOffset = vectorFromTo(mouseX, mouseY, vLoc.x, vLoc.y);
+                    return;
+                }
             }
         }
     }
@@ -702,7 +749,10 @@ public class DrawHyperGraph extends PApplet
     @Override
     public void mouseReleased ()
     {
-        held = null;
+        if (mouseButton == RIGHT)
+        {
+            held.clear();
+        }
     }
 
     public void headingSettings (Edge e)
@@ -826,7 +876,7 @@ public class DrawHyperGraph extends PApplet
                             
                             for (Field f : DrawHyperGraph.class.getDeclaredFields())
                             {
-                                CommandLineConfigurable var = f.getDeclaredAnnotation(CommandLineConfigurable.class);
+                                NamedArgument var = f.getDeclaredAnnotation(NamedArgument.class);
                                 if (var != null && flag.equals(f.getName()))
                                 {
                                     Converter converter = ((Converter)var.converter().newInstance());
@@ -1037,7 +1087,7 @@ public class DrawHyperGraph extends PApplet
     {
         for (Field f : DrawHyperGraph.class.getDeclaredFields())
         {
-            CommandLineConfigurable config = f.getAnnotation(CommandLineConfigurable.class);
+            NamedArgument config = f.getAnnotation(NamedArgument.class);
             if (config != null)
                 System.out.printf("-%s : %s\n", f.getName(), config.description());
         }
@@ -1094,6 +1144,8 @@ public class DrawHyperGraph extends PApplet
                 vertexLocations.put(v, new PVector(0, 0));
     }
 
+    
+    // TODO: still not sure what I want for a tree placing algorithm
     private void placeVerticesTree (Graph G)
     {
         Set<Vertex> verticesWithNoParents = new HashSet<>(G.vertices);
@@ -1219,14 +1271,8 @@ public class DrawHyperGraph extends PApplet
     // this is dumb
     private static Class<?> classForName (String name)
     {
-        try
-        {
-            return Class.forName(name);
-        }
-        catch (ClassNotFoundException ex)
-        {
-            return null;
-        }
+        try                               { return Class.forName(name); }
+        catch (ClassNotFoundException ex) { return null; }
     }
 } // end class DrawHyperGraph
 
